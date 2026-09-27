@@ -97,6 +97,9 @@ Subscribe to the server-sent event stream:
 GET /api/events
 ```
 
+The React **Ledger Explorer** also subscribes to this stream and displays the
+latest block commits and academic lifecycle events under **Live Fabric Events**.
+
 Chaincode emits `AcademicCertificateLifecycle` events for initialization,
 student registration, request creation, workflow transitions, issuance, and
 revocation. The stream standardizes each event with `eventName`,

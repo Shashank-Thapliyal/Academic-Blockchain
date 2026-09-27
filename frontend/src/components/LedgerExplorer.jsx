@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNetwork } from '../context/NetworkContext';
-import { RefreshCw, FileText, Globe } from 'lucide-react';
+import { RefreshCw, FileText, Radio } from 'lucide-react';
 
 export default function LedgerExplorer() {
   const { API_BASE } = useNetwork();
   const [certs, setCerts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [eventStatus, setEventStatus] = useState('CONNECTING');
 
   const fetchCerts = async () => {
     setLoading(true);
@@ -23,6 +25,27 @@ export default function LedgerExplorer() {
   useEffect(() => {
     fetchCerts();
   }, []);
+
+  useEffect(() => {
+    const source = new EventSource(`${API_BASE}/events`);
+
+    source.addEventListener('ready', (event) => {
+      const status = JSON.parse(event.data);
+      setEventStatus(status.started ? 'LIVE' : 'UNAVAILABLE');
+    });
+
+    source.addEventListener('ledger', (event) => {
+      const ledgerEvent = JSON.parse(event.data);
+      setEvents((current) => [ledgerEvent, ...current].slice(0, 12));
+      setEventStatus('LIVE');
+      if (ledgerEvent.type === 'chaincode') {
+        fetchCerts();
+      }
+    });
+
+    source.onerror = () => setEventStatus('DISCONNECTED');
+    return () => source.close();
+  }, [API_BASE]);
 
   return (
     <div className="card">
@@ -86,6 +109,37 @@ export default function LedgerExplorer() {
           </tbody>
         </table>
       </div>
+
+      <section className="ledger-events">
+        <div className="ledger-events-title">
+          <div>
+            <h4>Live Fabric Events</h4>
+            <p>Block commits and academic lifecycle events received from the ledger.</p>
+          </div>
+          <span className={`event-connection ${eventStatus.toLowerCase()}`}>
+            <Radio size={13} /> {eventStatus}
+          </span>
+        </div>
+        {events.length === 0 ? (
+          <p className="empty-hint">Waiting for the next ledger event...</p>
+        ) : (
+          <div className="ledger-event-list">
+            {events.map((event, index) => {
+              const payload = event.payload || {};
+              const label = event.type === 'chaincode'
+                ? `${payload.action || event.eventName} · ${payload.entityId || 'ledger'}`
+                : `Block ${event.blockNumber} committed`;
+              return (
+                <div className="ledger-event-row" key={`${event.transactionId || event.blockNumber}-${index}`}>
+                  <span className="ledger-event-kind">{event.type}</span>
+                  <strong>{label}</strong>
+                  <code>{event.transactionId ? `${event.transactionId.substring(0, 12)}...` : `#${event.blockNumber}`}</code>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
