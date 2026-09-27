@@ -81,7 +81,7 @@
 
 | Contributor | Designation | Blockchain Deliverable | Module / Agentic Deliverable |
 |---|---|---|---|
-| **Contributor 5.1** | **Fabric Event & History Hub Specialist** | • Implements Fabric Gateway gRPC event listeners (Block Listener, Transaction Commit Listener).<br>• Develops chaincode history query wrapper (`GetHistoryForKey`) to extract the complete modification timeline of any certificate. | • Serializes raw blockchain history and transaction payloads into structured data for agent consumption. |
+| **Contributor 5.1** | **Fabric Event & History Hub Specialist** | • Implements Fabric Gateway chaincode-event and block-event streams.<br>• Exposes the native chaincode history wrapper (`GetHistoryForKey`) through `GET /api/history/:key`.<br>• Publishes standardized live updates through `GET /api/events`. | • Serializes transaction IDs, block numbers, timestamps, lifecycle payloads, and state history into JSON for agent consumption. |
 | **Contributor 5.2** | **Conversational NLP & Intent Engine Lead** | • Maps natural language queries (e.g. *"Show certificate status for CERT-101"*, *"Who approved this degree?"*) into blockchain query parameters. | • Implements the **Conversational AI Agent (Chatbot Engine)** providing intelligent, context-aware explanations of ledger transactions and approval workflows. |
 | **Contributor 5.3** | **Chatbot Widget & Real-Time Client Engineer** | • Integrates real-time ledger updates into the chat context so the chatbot reflects live blockchain state. | • Builds the responsive floating/docked **Chatbot UI Widget** with quick-action prompt chips, streaming responses, and transaction visualizers. |
 

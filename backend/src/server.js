@@ -7,7 +7,15 @@ const { generateCertificatePDF } = require('./pdf');
 const fs = require('fs');
 const path = require('path');
 const { calculateSHA256, uploadToIPFS, fetchFromIPFS, checkIPFSHealth } = require('./ipfs');
-const { invokeChaincode, queryChaincode, checkNetworkHealth } = require('./fabric');
+const {
+  invokeChaincode,
+  queryChaincode,
+  getCertificateHistory,
+  startEventListener,
+  onLedgerEvent,
+  getEventStatus,
+  checkNetworkHealth
+} = require('./fabric');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -37,7 +45,8 @@ app.get('/api/health', async (req, res) => {
         { name: 'Org1 - University / Academic', msp: 'Org1MSP', peer: 'peer0.org1.academic.edu:7051' },
         { name: 'Org2 - Examination Board', msp: 'Org2MSP', peer: 'peer0.org2.academic.edu:8051' },
         { name: 'Org3 - Administration & Verifier', msp: 'Org3MSP', peer: 'peer0.org3.academic.edu:9051' }
-      ]
+      ],
+      events: getEventStatus()
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -109,6 +118,33 @@ app.get('/api/requests/:id', async (req, res) => {
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
+});
+
+app.get('/api/history/:key', async (req, res) => {
+  try {
+    const history = await getCertificateHistory(req.params.key);
+    res.json({ key: req.params.key, history: history || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message, key: req.params.key });
+  }
+});
+
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event) => {
+    res.write(`event: ledger\ndata: ${JSON.stringify(event)}\n\n`);
+  };
+  const removeListener = onLedgerEvent(sendEvent);
+  res.write(`event: ready\ndata: ${JSON.stringify(getEventStatus())}\n\n`);
+
+  req.on('close', () => {
+    removeListener();
+    res.end();
+  });
 });
 
 app.get('/api/requests', async (req, res) => {
@@ -345,6 +381,10 @@ app.get('/api/certificates', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+startEventListener(1).catch((error) => {
+  console.error(`[Fabric Events] Listener unavailable: ${error.message}`);
 });
 
 app.listen(PORT, '0.0.0.0', () => {

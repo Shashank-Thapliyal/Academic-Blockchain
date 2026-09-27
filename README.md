@@ -39,7 +39,7 @@ The network is governed by a **3-Organization Consortium** operating on a shared
 | Module | Component | Description & Responsibilities |
 |---|---|---|
 | **Module 1** | **Registration & Requests** | Student onboarding (`RegisterStudent`), request submission (`RequestCertificate`), profile validation. |
-| **Module 2** | **7-Stage Approval Workflow** | State machine enforced by smart contract across organizations: `SUBMITTED` → `FACULTY_APPROVED` → `HOD_APPROVED` → `DAC_APPROVED` (Org 1) → `EXAM_LOCKED` (Org 2) → `DEAN_APPROVED` → `ADMIN_FINALIZED` (Org 3). |
+| **Module 2** | **7-Stage Approval Workflow** | State machine enforced by smart contract across organizations: `SUBMITTED` → `FACULTY_APPROVED` → `HOD_APPROVED` → `DAC_APPROVED` (Org 1) → `EXAM_LOCKED` (Org 2) → `DEAN_APPROVED` → `ADMIN_FINALIZED` (Org 3). Issuance then records `CERTIFICATE_ISSUED` on the linked request. |
 | **Module 3** | **PDF & IPFS Storage** | Generates official certificate PDF, uploads to IPFS Kubo node, retrieves IPFS CID, and computes SHA-256 fingerprint. |
 | **Module 4** | **Distributed Fabric Network** | Anchors CID and SHA-256 onto Fabric ledger. Powers public verification (`VERIFIED` / `REVOKED` / `INVALID`) and immutable revocation. |
 
@@ -67,6 +67,57 @@ cd "Academic Blockchain"
 - **Web Verification & Management Portal**: [http://localhost:3000](http://localhost:3000)
 - **Backend REST API**: [http://localhost:4000/api/health](http://localhost:4000/api/health)
 - **Local IPFS Gateway**: [http://localhost:8080](http://localhost:8080)
+
+### Fabric History & Live Events
+
+The backend uses the Fabric Gateway Node SDK for read-only ledger access. The
+Gateway connects as the Org1 administrator over TLS using the crypto material
+mounted by `docker-compose-app.yaml`; transaction submission remains handled by
+the existing multi-peer CLI path.
+
+#### History
+
+Query native Fabric key history with:
+
+```text
+GET /api/history/REQ_<request-id>
+GET /api/history/CERT_<certificate-id>
+```
+
+The response is standardized as `{ key, history }`. Each history item contains
+`txId`, `timestamp`, `isDelete`, and the parsed state `value`. Request workflow
+history is also retained in the request document, but `/api/history/:key` reads
+the immutable Fabric ledger history through `GetHistoryForKey`.
+
+#### Live events
+
+Subscribe to the server-sent event stream:
+
+```text
+GET /api/events
+```
+
+Chaincode emits `AcademicCertificateLifecycle` events for initialization,
+student registration, request creation, workflow transitions, issuance, and
+revocation. The stream standardizes each event with `eventName`,
+`transactionId`, `blockNumber`, `payload`, and `receivedAt`. The health endpoint
+reports listener state under `events`.
+
+### Redeploying After Chaincode Changes
+
+History and event support are part of the chaincode contract. After changing
+`chaincode/academic-contract/index.js`, rebuild and redeploy the chaincode:
+
+```bash
+./stop.sh
+./start.sh
+```
+
+For an already-running network, use the Fabric lifecycle upgrade procedure to
+install, approve, and commit a new chaincode sequence. The current helper exits
+when `academic-contract` is already committed, so the simplest clean local
+reset is `./stop.sh && ./start.sh`; this removes the local Fabric volumes and
+therefore removes existing ledger data.
 
 ---
 
@@ -138,7 +189,7 @@ Academic Blockchain/
 │   └── academic-contract/      # Smart contract implementing 7-stage lifecycle
 │       ├── package.json
 │       └── index.js
-├── backend/                    # Express REST API
+├── backend/                    # Express REST API and Fabric Gateway event hub
 │   ├── Dockerfile
 │   ├── package.json
 │   └── src/

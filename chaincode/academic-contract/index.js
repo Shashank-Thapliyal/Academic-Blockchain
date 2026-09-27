@@ -19,6 +19,18 @@ class AcademicContract extends Contract {
     return '2024-01-01T00:00:00.000Z';
   }
 
+  async _emitLifecycleEvent(ctx, action, entityType, entityId, data) {
+    const event = {
+      eventType: 'ACADEMIC_CERTIFICATE_LIFECYCLE',
+      action,
+      entityType,
+      entityId,
+      timestamp: this._getTxTimestamp(ctx),
+      data
+    };
+    ctx.stub.setEvent('AcademicCertificateLifecycle', Buffer.from(JSON.stringify(event)));
+  }
+
   async initLedger(ctx) {
     console.info('============= START : Initialize Academic Ledger ===========');
     const timestamp = this._getTxTimestamp(ctx);
@@ -29,6 +41,7 @@ class AcademicContract extends Contract {
       version: '1.0.0'
     };
     await ctx.stub.putState('NETWORK_INIT', Buffer.from(JSON.stringify(initMarker)));
+    await this._emitLifecycleEvent(ctx, 'LEDGER_INITIALIZED', 'network', 'NETWORK_INIT', initMarker);
     console.info('============= END : Initialize Academic Ledger ===========');
   }
 
@@ -59,6 +72,7 @@ class AcademicContract extends Contract {
     };
 
     await ctx.stub.putState(`STUDENT_${studentId}`, Buffer.from(JSON.stringify(student)));
+    await this._emitLifecycleEvent(ctx, 'STUDENT_REGISTERED', 'student', studentId, student);
     return JSON.stringify(student);
   }
 
@@ -124,6 +138,7 @@ class AcademicContract extends Contract {
     };
 
     await ctx.stub.putState(reqKey, Buffer.from(JSON.stringify(certificateRequest)));
+  await this._emitLifecycleEvent(ctx, 'CERTIFICATE_REQUESTED', 'request', requestId, certificateRequest);
     return JSON.stringify(certificateRequest);
   }
 
@@ -158,6 +173,7 @@ class AcademicContract extends Contract {
     });
 
     await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(request)));
+  await this._emitLifecycleEvent(ctx, 'REQUEST_STAGE_CHANGED', 'request', requestId, request.history[request.history.length - 1]);
     return JSON.stringify(request);
   }
 
@@ -186,6 +202,7 @@ class AcademicContract extends Contract {
     });
 
     await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(request)));
+    await this._emitLifecycleEvent(ctx, 'REQUEST_STAGE_CHANGED', 'request', requestId, request.history[request.history.length - 1]);
     return JSON.stringify(request);
   }
 
@@ -277,6 +294,8 @@ class AcademicContract extends Contract {
       await ctx.stub.putState(`REQ_${requestId}`, Buffer.from(JSON.stringify(requestObj)));
     }
 
+    await this._emitLifecycleEvent(ctx, 'CERTIFICATE_ISSUED', 'certificate', certId, certificate);
+
     return JSON.stringify(certificate);
   }
 
@@ -349,6 +368,7 @@ class AcademicContract extends Contract {
     };
 
     await ctx.stub.putState(`CERT_${certId}`, Buffer.from(JSON.stringify(cert)));
+  await this._emitLifecycleEvent(ctx, 'CERTIFICATE_REVOKED', 'certificate', certId, cert);
     return JSON.stringify(cert);
   }
 
@@ -366,6 +386,33 @@ class AcademicContract extends Contract {
 
   async GetAllStudents(ctx) {
     return await this._queryByPrefix(ctx, 'STUDENT_');
+  }
+
+  async GetHistoryForKey(ctx, key) {
+    if (!key) {
+      throw new Error('key is required');
+    }
+
+    const iterator = await ctx.stub.getHistoryForKey(key);
+    const history = [];
+    let result = await iterator.next();
+    while (!result.done) {
+      const value = result.value;
+      const timestamp = value.timestamp || {};
+      const seconds = timestamp.seconds && timestamp.seconds.low !== undefined
+        ? timestamp.seconds.low
+        : Number(timestamp.seconds || 0);
+      const nanos = Number(timestamp.nanos || 0);
+      history.push({
+        txId: value.txId,
+        timestamp: new Date((seconds * 1000) + Math.floor(nanos / 1000000)).toISOString(),
+        isDelete: value.isDelete,
+        value: value.isDelete ? null : JSON.parse(value.value.toString('utf8'))
+      });
+      result = await iterator.next();
+    }
+    await iterator.close();
+    return JSON.stringify(history);
   }
 
   async _queryByPrefix(ctx, prefix) {

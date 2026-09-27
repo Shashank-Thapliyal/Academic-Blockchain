@@ -15,8 +15,10 @@ services:
       - IPFS_GATEWAY_PORT=8080
       - CHANNEL_NAME=academicchannel
       - CHAINCODE_NAME=academic-contract
+      - FABRIC_CRYPTO_ROOT=/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ../network/crypto-config:/opt/gopath/src/github.com/hyperledger/fabric/peer/crypto:ro
     ports:
       - "4000:4000"
     networks:
