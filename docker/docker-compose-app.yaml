@@ -1,0 +1,39 @@
+networks:
+  academic-net:
+    external: true
+
+services:
+  backend-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: backend-api
+    environment:
+      - PORT=4000
+      - IPFS_HOST=ipfs-node
+      - IPFS_API_PORT=5001
+      - IPFS_GATEWAY_PORT=8080
+      - CHANNEL_NAME=academicchannel
+      - CHAINCODE_NAME=academic-contract
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "4000:4000"
+    networks:
+      - academic-net
+    restart: unless-stopped
+
+  frontend-portal:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: frontend-portal
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    networks:
+      - academic-net
+    depends_on:
+      - backend-api
+    restart: unless-stopped

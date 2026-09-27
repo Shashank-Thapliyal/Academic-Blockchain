@@ -1,0 +1,19 @@
+{
+  "name": "academic-contract",
+  "version": "1.0.0",
+  "description": "Academic Certificate and Verification Smart Contract for 3-Org Network",
+  "main": "index.js",
+  "engines": {
+    "node": ">=16",
+    "npm": ">=8"
+  },
+  "scripts": {
+    "start": "fabric-chaincode-node start"
+  },
+  "dependencies": {
+    "fabric-contract-api": "^2.5.3",
+    "fabric-shim": "^2.5.3"
+  },
+  "author": "Academic Consortium",
+  "license": "Apache-2.0"
+}

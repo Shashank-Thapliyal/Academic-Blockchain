@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employer Verification Portal — Academic Blockchain Consortium</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- HTML5-QRCode library for browser camera & image QR scanning -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="employer-portal-body">
+  <!-- Navigation -->
+  <header class="top-nav">
+    <div class="nav-brand">
+      <div class="brand-icon">🏛️</div>
+      <div class="brand-text">
+        <h1>Employer Credential Verification Portal</h1>
+        <p>Public Read-Only Verifier • Hyperledger Fabric 2.5 • IPFS Cryptographic Proofs</p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <a href="/" class="btn-secondary btn-sm">⚙️ Consortium Management</a>
+      <div class="network-badge" id="netStatusBadge">
+        <span class="status-dot ping"></span>
+        <span id="networkStatusText">Connecting to Ledger...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="employer-hero">
+    <div class="hero-content">
+      <div class="trust-badge">🔒 100% Cryptographically Verifiable & Tamper-Proof</div>
+      <h2>Verify Academic Credentials Directly on Blockchain</h2>
+      <p>Instant zero-trust degree authentication backed by 3-Organization Hyperledger Fabric Consensus and Decentralized IPFS Storage.</p>
+    </div>
+  </section>
+
+  <!-- Main Container -->
+  <main class="main-container employer-main">
+    
+    <!-- Verification Method Selector Cards -->
+    <div class="verify-methods-container">
+      
+      <!-- Option 1: QR Code Scanner (Camera & Upload) -->
+      <div class="verify-card active" id="cardQrScan">
+        <div class="verify-card-header">
+          <div class="card-icon">📷</div>
+          <div>
+            <h3>Scan Verifiable QR Code</h3>
+            <p>Scan the QR on candidate's certificate with webcam or upload a photo/screenshot</p>
+          </div>
+        </div>
+
+        <div class="qr-scanner-wrapper">
+          <div id="qrReader" class="qr-reader-viewport"></div>
+          
+          <div class="qr-controls">
+            <button type="button" class="btn-primary" id="startCameraBtn">🎥 Start Camera Scanner</button>
+            <button type="button" class="btn-secondary" id="stopCameraBtn" style="display: none;">⏹️ Stop Camera</button>
+          </div>
+
+          <div class="or-divider"><span>OR UPLOAD QR IMAGE</span></div>
+
+          <div class="file-dropzone" id="qrDropzone">
+            <input type="file" id="qrFileInput" accept="image/*" class="file-input-hidden">
+            <div class="dropzone-content">
+              <span class="dropzone-icon">🖼️</span>
+              <p><strong>Click or Drag & Drop</strong> certificate QR image here</p>
+              <span class="dropzone-hint">PNG, JPG, WebP supported</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 2: PDF Document Hash Verification -->
+      <div class="verify-card" id="cardPdfUpload">
+        <div class="verify-card-header">
+          <div class="card-icon">📄</div>
+          <div>
+            <h3>Upload Candidate PDF</h3>
+            <p>Calculates SHA-256 fingerprint in real-time to detect any alteration</p>
+          </div>
+        </div>
+
+        <div class="file-dropzone" id="pdfDropzone">
+          <input type="file" id="pdfFileInput" accept=".pdf" class="file-input-hidden">
+          <div class="dropzone-content">
+            <span class="dropzone-icon">📁</span>
+            <p><strong>Click or Drag & Drop</strong> official certificate PDF</p>
+            <span class="dropzone-hint">Tamper check against Hyperledger Fabric state</span>
+          </div>
+        </div>
+
+        <div id="pdfFileSelectedInfo" class="file-selected-info" style="display: none;">
+          <span>Selected: <strong id="pdfFileName"></strong></span>
+          <button type="button" class="btn-primary full-width" id="verifyPdfBtn">Verify PDF Hash on Ledger</button>
+        </div>
+      </div>
+
+      <!-- Option 3: Manual ID or Hash Lookup -->
+      <div class="verify-card" id="cardManualLookup">
+        <div class="verify-card-header">
+          <div class="card-icon">🔍</div>
+          <div>
+            <h3>Search by ID or Hash</h3>
+            <p>Look up using unique Certificate ID or 64-character SHA-256 digest</p>
+          </div>
+        </div>
+
+        <form id="manualLookupForm">
+          <div class="form-group">
+            <label for="manualInput">Certificate ID or SHA-256 Hash:</label>
+            <input type="text" id="manualInput" required placeholder="e.g. CERT-2024-001 or 64-character hash">
+          </div>
+          <button type="submit" class="btn-primary full-width" id="manualLookupBtn">Search Blockchain Ledger</button>
+        </form>
+
+        <div class="quick-examples">
+          <span class="quick-label">Try sample:</span>
+          <button type="button" class="sample-chip" data-sample="CERT-2024-001">CERT-2024-001</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Verification Result Stage -->
+    <section id="verificationResultSection" class="result-section" style="display: none;">
+      
+      <!-- Verification Header Banner -->
+      <div id="resultBanner" class="result-banner status-verified">
+        <div class="banner-icon" id="bannerIcon">✅</div>
+        <div class="banner-text">
+          <h2 id="bannerTitle">OFFICIAL CREDENTIAL VERIFIED</h2>
+          <p id="bannerSubtitle">This academic certificate is authentic, untampered, and anchored on the Hyperledger Fabric blockchain.</p>
+        </div>
+        <div class="banner-timestamp" id="bannerTimestamp">Verified: Just now</div>
+      </div>
+
+      <!-- Credential Breakdown Grid -->
+      <div class="credential-grid">
+        
+        <!-- Left: Student & Degree Information -->
+        <div class="card credential-card">
+          <div class="card-title">
+            <h3>🎓 Candidate & Academic Information</h3>
+            <span class="step-num" id="certIdTag">CERT-2024-001</span>
+          </div>
+
+          <div class="credential-fields">
+            <div class="field-item">
+              <span class="field-label">Student Name:</span>
+              <span class="field-value highlight-name" id="resStudentName">—</span>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Student Registration ID:</span>
+              <span class="field-value" id="resStudentId">—</span>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Awarded Degree / Title:</span>
+              <span class="field-value highlight-degree" id="resCertType">—</span>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Academic Department:</span>
+              <span class="field-value" id="resDepartment">Department of Computer Science & Engineering</span>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Date of Official Issuance:</span>
+              <span class="field-value" id="resIssueDate">—</span>
+            </div>
+            <div class="field-item">
+              <span class="field-label">Ledger Status:</span>
+              <span class="field-value" id="resStatusBadge"><span class="badge-status-pill verified">ISSUED / ACTIVE</span></span>
+            </div>
+          </div>
+
+          <div class="certificate-actions">
+            <a href="#" id="viewPdfLink" target="_blank" class="btn-primary btn-sm">📄 View Official PDF</a>
+            <a href="#" id="viewIpfsLink" target="_blank" class="btn-secondary btn-sm">🌐 View on IPFS Gateway</a>
+            <button type="button" class="btn-secondary btn-sm" id="printReportBtn">🖨️ Print Verification Report</button>
+          </div>
+        </div>
+
+        <!-- Right: Cryptographic & Blockchain Proofs -->
+        <div class="card proof-card">
+          <div class="card-title">
+            <h3>⛓️ Cryptographic & Consensus Proofs</h3>
+            <span class="step-num">Fabric 2.5</span>
+          </div>
+
+          <div class="proof-list">
+            <div class="proof-item">
+              <span class="proof-label">SHA-256 Document Fingerprint:</span>
+              <code class="proof-hash" id="resDocHash">—</code>
+              <span class="proof-hint">Matches byte-for-byte with the official institutional record</span>
+            </div>
+
+            <div class="proof-item">
+              <span class="proof-label">Decentralized IPFS CID:</span>
+              <code class="proof-hash" id="resIpfsCid">—</code>
+            </div>
+
+            <div class="proof-item">
+              <span class="proof-label">Issuing Organization MSP:</span>
+              <span class="proof-val" id="resIssuerMsp">Org3MSP (Central University Governance)</span>
+            </div>
+
+            <!-- 3-Org Multi-Stage Endorsement Pipeline -->
+            <div class="proof-item">
+              <span class="proof-label">Consortium Multi-Party Approval Chain:</span>
+              <div class="approval-chain">
+                <div class="chain-step step-done">
+                  <span class="chain-dot">✓</span>
+                  <div>
+                    <strong>Org 1 (CSE Faculty & HOD)</strong>
+                    <p>Departmental Curriculum & Credit Clearance</p>
+                  </div>
+                </div>
+                <div class="chain-step step-done">
+                  <span class="chain-dot">✓</span>
+                  <div>
+                    <strong>Org 2 (Examination Board)</strong>
+                    <p>Official Grade & Transcript Lockdown</p>
+                  </div>
+                </div>
+                <div class="chain-step step-done">
+                  <span class="chain-dot">✓</span>
+                  <div>
+                    <strong>Org 3 (Dean & Administration)</strong>
+                    <p>Final Clearance & Blockchain Anchoring</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Revocation Warning Box (if Revoked) -->
+      <div id="revocationBox" class="card revocation-alert" style="display: none;">
+        <h3>⚠️ Notice of Administrative Revocation</h3>
+        <p id="revocationReasonText">This certificate was revoked by the Academic Administration.</p>
+        <div class="revocation-meta">
+          <span>Revoked By: <strong id="resRevokedBy">Dean / Registrar</strong></span>
+          <span>Revocation Date: <strong id="resRevokedAt">—</strong></span>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="footer employer-footer">
+    <p>Academic Blockchain Consortium • Hyperledger Fabric 2.5 Multi-Org Network • Public Verification Portal</p>
+  </footer>
+
+  <script src="verify.js"></script>
+</body>
+</html>

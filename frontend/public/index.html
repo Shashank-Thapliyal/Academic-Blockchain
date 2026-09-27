@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Academic Blockchain — 3-Organization Consortium Portal</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="top-nav">
+    <div class="nav-brand">
+      <div class="brand-icon">🎓</div>
+      <div class="brand-text">
+        <h1>Academic Blockchain PBL</h1>
+        <p>3-Organization Consortium • Hyperledger Fabric 2.5 • IPFS Storage</p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <a href="/verify" class="btn-primary btn-sm" style="text-decoration: none; font-weight: 600;">🏢 Employer Verification Portal</a>
+      <div class="network-badge" id="netStatusBadge">
+        <span class="status-dot ping"></span>
+        <span id="networkStatusText">Checking Network...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- 3-Org Topology Overview -->
+  <section class="consortium-bar">
+    <div class="org-card" id="org1Card">
+      <div class="org-header">
+        <span class="org-tag tag-org1">Org 1</span>
+        <h3>University / Faculty</h3>
+      </div>
+      <p class="org-role">Academic Dept, Faculty, HOD, DAC Approvals</p>
+      <div class="org-meta">
+        <span>MSP: <code>Org1MSP</code></span>
+        <span>Peer: <code>peer0.org1:7051</code></span>
+      </div>
+    </div>
+
+    <div class="org-card" id="org2Card">
+      <div class="org-header">
+        <span class="org-tag tag-org2">Org 2</span>
+        <h3>Examination Board</h3>
+      </div>
+      <p class="org-role">Controller of Examinations, Exam Grade Lockdown</p>
+      <div class="org-meta">
+        <span>MSP: <code>Org2MSP</code></span>
+        <span>Peer: <code>peer0.org2:8051</code></span>
+      </div>
+    </div>
+
+    <div class="org-card" id="org3Card">
+      <div class="org-header">
+        <span class="org-tag tag-org3">Org 3</span>
+        <h3>Admin & Governance</h3>
+      </div>
+      <p class="org-role">Dean Sanction, Final Clearance, Issuance & Revocation</p>
+      <div class="org-meta">
+        <span>MSP: <code>Org3MSP</code></span>
+        <span>Peer: <code>peer0.org3:9051</code></span>
+      </div>
+    </div>
+
+    <div class="org-card infra-card">
+      <div class="org-header">
+        <span class="org-tag tag-infra">Infra</span>
+        <h3>Consensus & Storage</h3>
+      </div>
+      <p class="org-role">Raft Orderer + Decentralized IPFS Storage Node</p>
+      <div class="org-meta">
+        <span>Orderer: <code>7050 (Raft)</code></span>
+        <span>IPFS: <code>5001 / 8080</code></span>
+      </div>
+    </div>
+  </section>
+
+  <main class="main-container">
+    <!-- Tabs Navigation -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="workflow-tab">📋 Lifecycle & Workflow</button>
+      <button class="tab-btn" data-tab="register-tab">👤 Student Registration</button>
+      <button class="tab-btn" data-tab="verify-tab">🔍 Verification Portal</button>
+      <button class="tab-btn" data-tab="revoke-tab">⚠️ Revocation</button>
+      <button class="tab-btn" data-tab="ledger-tab">📊 Ledger Explorer</button>
+    </nav>
+
+    <!-- Tab 1: Workflow & Issuance -->
+    <section id="workflow-tab" class="tab-content active">
+      <div class="panel-grid">
+        <!-- Request Submission Form -->
+        <div class="card">
+          <div class="card-title">
+            <h3>1. Submit Certificate Request</h3>
+            <span class="step-num">Module 1</span>
+          </div>
+          <form id="reqForm">
+            <div class="form-group">
+              <label for="reqIdInput">Request ID:</label>
+              <div class="input-with-action">
+                <input type="text" id="reqIdInput" required placeholder="e.g. REQ-2024-001">
+                <button type="button" class="btn-secondary" id="genReqIdBtn">Auto</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="reqStudentId">Registered Student ID:</label>
+              <input type="text" id="reqStudentId" required placeholder="e.g. STU-2024-001">
+            </div>
+            <div class="form-group">
+              <label for="reqCertType">Degree / Certificate Type:</label>
+              <select id="reqCertType">
+                <option value="Bachelor of Technology in CSE">Bachelor of Technology in CSE</option>
+                <option value="Master of Science in Data Science">Master of Science in Data Science</option>
+                <option value="Bachelor of Science in AI & Robotics">Bachelor of Science in AI & Robotics</option>
+                <option value="Executive Post Graduate Diploma">Executive Post Graduate Diploma</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary full-width" id="submitReqBtn">Submit Certificate Request</button>
+          </form>
+        </div>
+
+        <!-- 7-Stage State Machine Visualizer -->
+        <div class="card wide-card">
+          <div class="card-title">
+            <h3>2. 7-Stage Approval Workflow State Machine</h3>
+            <span class="step-num">Module 2</span>
+          </div>
+          <p class="subtitle">Select or enter Request ID to track state & execute stage approvals across Org1, Org2, Org3.</p>
+
+          <div class="lookup-bar">
+            <input type="text" id="activeReqInput" placeholder="Enter Request ID to track">
+            <button type="button" class="btn-primary" id="trackReqBtn">Track Request</button>
+            <button type="button" class="btn-secondary" id="autoAdvanceBtn">⚡ Auto-Advance All Stages</button>
+          </div>
+
+          <!-- Stepper Pipeline -->
+          <div class="stepper" id="workflowStepper">
+            <div class="step-item" id="step-SUBMITTED">
+              <div class="step-circle">1</div>
+              <div class="step-label">SUBMITTED</div>
+              <div class="step-org">Student</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-FACULTY_APPROVED">
+              <div class="step-circle">2</div>
+              <div class="step-label">FACULTY</div>
+              <div class="step-org">Org 1</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-HOD_APPROVED">
+              <div class="step-circle">3</div>
+              <div class="step-label">HOD</div>
+              <div class="step-org">Org 1</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-DAC_APPROVED">
+              <div class="step-circle">4</div>
+              <div class="step-label">DAC</div>
+              <div class="step-org">Org 1</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-EXAM_LOCKED">
+              <div class="step-circle">5</div>
+              <div class="step-label">EXAM LOCK</div>
+              <div class="step-org">Org 2</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-DEAN_APPROVED">
+              <div class="step-circle">6</div>
+              <div class="step-label">DEAN</div>
+              <div class="step-org">Org 3</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step-item" id="step-ADMIN_FINALIZED">
+              <div class="step-circle">7</div>
+              <div class="step-label">ADMIN</div>
+              <div class="step-org">Org 3</div>
+            </div>
+          </div>
+
+          <!-- Approval Action Bar -->
+          <div class="action-box" id="approvalActions">
+            <h4>Next Pending Action:</h4>
+            <div id="actionControls" class="action-buttons">
+              <p class="placeholder-text">Track a request above to perform stage approvals.</p>
+            </div>
+          </div>
+
+          <!-- Stage Audit History -->
+          <div class="history-box">
+            <h4>Ledger Transition History:</h4>
+            <ul id="historyList" class="history-list">
+              <li class="empty-hint">No request loaded</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Certificate Issuance & IPFS Section -->
+      <div class="card issuance-card">
+        <div class="card-title">
+          <h3>3. PDF Generation → IPFS Upload → SHA-256 → Fabric Anchoring</h3>
+          <span class="step-num">Module 3 & 4</span>
+        </div>
+        <p class="subtitle">Once a request reaches <code>ADMIN_FINALIZED</code>, Org3 generates the official PDF, pins it to IPFS, computes the SHA-256 hash, and anchors the certificate on the ledger.</p>
+
+        <div class="issuance-grid">
+          <div class="issuance-form">
+            <div class="form-group">
+              <label for="issueCertId">Certificate ID:</label>
+              <input type="text" id="issueCertId" placeholder="e.g. CERT-2024-001">
+            </div>
+            <button type="button" class="btn-success" id="issueCertBtn">🚀 Issue Certificate & Anchor to Blockchain</button>
+          </div>
+
+          <div class="issuance-output" id="issueResultPanel">
+            <div class="result-placeholder">Issued certificate details and cryptographic proof will appear here.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Student Registration -->
+    <section id="register-tab" class="tab-content">
+      <div class="panel-grid">
+        <div class="card">
+          <div class="card-title">
+            <h3>Register New Student</h3>
+            <span class="step-num">Module 1</span>
+          </div>
+          <form id="studentForm">
+            <div class="form-group">
+              <label for="stuId">Student ID:</label>
+              <input type="text" id="stuId" required placeholder="e.g. STU-2024-001">
+            </div>
+            <div class="form-group">
+              <label for="stuName">Full Legal Name:</label>
+              <input type="text" id="stuName" required placeholder="e.g. Divyanshu Sharma">
+            </div>
+            <div class="form-group">
+              <label for="stuEmail">Institutional Email:</label>
+              <input type="email" id="stuEmail" required placeholder="e.g. student@academic.edu">
+            </div>
+            <div class="form-group">
+              <label for="stuDept">Academic Department:</label>
+              <input type="text" id="stuDept" value="Computer Science & Engineering">
+            </div>
+            <div class="form-group">
+              <label for="stuYear">Enrollment Year:</label>
+              <input type="text" id="stuYear" value="2024">
+            </div>
+            <button type="submit" class="btn-primary full-width">Register Student on Ledger (Org 1)</button>
+          </form>
+        </div>
+
+        <div class="card wide-card">
+          <div class="card-title">
+            <h3>Registered Students Registry</h3>
+            <button class="btn-secondary btn-sm" id="refreshStudentsBtn">🔄 Refresh</button>
+          </div>
+          <div class="table-container">
+            <table id="studentsTable">
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>Year</th>
+                </tr>
+              </thead>
+              <tbody id="studentsTbody">
+                <tr><td colspan="5" class="empty-hint">Loading registered students...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Verification Portal -->
+    <section id="verify-tab" class="tab-content">
+      <div class="card full-width-card">
+        <div class="card-title">
+          <h3>Consortium Certificate Verification Portal</h3>
+          <span class="step-num">Public Verifier</span>
+        </div>
+        <p class="subtitle">Authenticate any academic certificate against the Hyperledger Fabric immutable ledger and IPFS content hash.</p>
+
+        <div class="verify-methods-grid">
+          <!-- Method A: By Cert ID -->
+          <div class="verify-box">
+            <h4>Method 1: By Certificate ID</h4>
+            <div class="form-group">
+              <input type="text" id="verifyCertIdInput" placeholder="e.g. CERT-2024-001">
+            </div>
+            <button class="btn-primary" id="verifyByIdBtn">Verify by ID</button>
+          </div>
+
+          <!-- Method B: By SHA-256 Hash -->
+          <div class="verify-box">
+            <h4>Method 2: By SHA-256 Fingerprint</h4>
+            <div class="form-group">
+              <input type="text" id="verifyHashInput" placeholder="Enter 64-char hex SHA-256 hash">
+            </div>
+            <button class="btn-primary" id="verifyByHashBtn">Verify by Hash</button>
+          </div>
+
+          <!-- Method C: By File Upload -->
+          <div class="verify-box">
+            <h4>Method 3: Upload Certificate PDF</h4>
+            <div class="form-group">
+              <input type="file" id="verifyFileInput" accept=".pdf">
+            </div>
+            <button class="btn-primary" id="verifyByFileBtn">Upload & Verify Hash</button>
+          </div>
+        </div>
+
+        <!-- Verification Results Display -->
+        <div class="verification-badge-container" id="verifyResultDisplay" style="display: none;">
+          <div class="badge-status" id="badgeStatus">VERIFIED</div>
+          <div class="badge-details" id="badgeDetails"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: Revocation -->
+    <section id="revoke-tab" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <h3>Revoke Academic Certificate</h3>
+          <span class="step-num">Admin / Org 3</span>
+        </div>
+        <p class="subtitle">Revoke a fraudulent, withdrawn, or administratively canceled certificate on the immutable Fabric ledger.</p>
+
+        <form id="revokeForm">
+          <div class="form-group">
+            <label for="revokeCertId">Certificate ID to Revoke:</label>
+            <input type="text" id="revokeCertId" required placeholder="e.g. CERT-2024-001">
+          </div>
+          <div class="form-group">
+            <label for="revokeReason">Revocation Reason:</label>
+            <textarea id="revokeReason" rows="3" required placeholder="State official audit or disciplinary reason..."></textarea>
+          </div>
+          <div class="form-group">
+            <label for="revokeOfficer">Revoking Authority:</label>
+            <input type="text" id="revokeOfficer" value="Dean / Controller of Academic Integrity">
+          </div>
+          <button type="submit" class="btn-danger full-width">Execute Immutable Revocation</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Tab 5: Ledger Explorer -->
+    <section id="ledger-tab" class="tab-content">
+      <div class="card full-width-card">
+        <div class="card-title">
+          <h3>Immutable Ledger Certificates</h3>
+          <button class="btn-secondary btn-sm" id="refreshCertsBtn">🔄 Refresh Ledger</button>
+        </div>
+        <div class="table-container">
+          <table id="certsTable">
+            <thead>
+              <tr>
+                <th>Cert ID</th>
+                <th>Student ID</th>
+                <th>Degree Title</th>
+                <th>Status</th>
+                <th>IPFS CID</th>
+                <th>SHA-256 Hash</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="certsTbody">
+              <tr><td colspan="7" class="empty-hint">Loading ledger records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Academic Blockchain PBL — Hyperledger Fabric 3-Org Network Architecture</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

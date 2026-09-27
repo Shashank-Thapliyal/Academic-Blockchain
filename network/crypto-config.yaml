@@ -1,0 +1,32 @@
+OrdererOrgs:
+  - Name: Orderer
+    Domain: academic.edu
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+        CommonName: orderer.academic.edu
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.academic.edu
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1
+
+  - Name: Org2
+    Domain: org2.academic.edu
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1
+
+  - Name: Org3
+    Domain: org3.academic.edu
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+    Users:
+      Count: 1
