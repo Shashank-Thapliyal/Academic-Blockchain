@@ -1,3 +1,162 @@
+
+// ==========================================
+// In-App Toast & Error Sanitizer
+// ==========================================
+function parseBlockchainError(rawError) {
+  if (!rawError) return 'An unexpected blockchain error occurred.';
+  let str = typeof rawError === 'string' ? rawError : (rawError.error || rawError.message || JSON.stringify(rawError));
+  
+  const chaincodeMatch = str.match(/chaincode response \d+,\s*([^\n\r"'`]+)/i);
+  if (chaincodeMatch && chaincodeMatch[1]) return cleanSentence(chaincodeMatch[1]);
+  
+  const statusMsgMatch = str.match(/(?:status:\s*\d+,\s*message:\s*["'])([^"'\n\r]+)/i);
+  if (statusMsgMatch && statusMsgMatch[1]) return cleanSentence(statusMsgMatch[1]);
+
+  if (str.includes('already been revoked') || str.includes('already revoked')) {
+    return 'This certificate has already been revoked on the blockchain.';
+  }
+  if (str.includes('already exists') || str.includes('already registered')) {
+    const idMatch = str.match(/([A-Z0-9_-]+)\s+already (?:exists|registered)/i);
+    return idMatch ? `Record ${idMatch[1]} already exists on the ledger.` : 'This record already exists on the blockchain.';
+  }
+  if (str.includes('does not exist') || str.includes('not found')) {
+    return 'The requested record was not found on the Hyperledger Fabric ledger.';
+  }
+  if (str.includes('ECONNREFUSED') || str.includes('Network error')) {
+    return 'Consortium Network Error: Could not connect to the Fabric peer network.';
+  }
+  if (str.includes('docker exec') || str.includes('Command failed')) {
+    const lastErrorMatch = str.match(/(?:Error|error):\s*([^\n\r]+)$/);
+    if (lastErrorMatch && lastErrorMatch[1] && !lastErrorMatch[1].includes('docker')) {
+      return cleanSentence(lastErrorMatch[1]);
+    }
+    return 'Blockchain peer query rejected by the consortium network.';
+  }
+  return cleanSentence(str.split('\n')[0].replace(/^Error:\s*/i, ''));
+}
+
+function cleanSentence(text) {
+  let cleaned = text.trim();
+  if (cleaned.startsWith('Error:')) cleaned = cleaned.replace(/^Error:\s*/i, '');
+  if (cleaned.startsWith('error:')) cleaned = cleaned.replace(/^error:\s*/i, '');
+  if (cleaned.length > 0) cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  if (!cleaned.endsWith('.') && !cleaned.endsWith('!') && !cleaned.endsWith('?')) cleaned += '.';
+  return cleaned;
+}
+
+function showToast(message, type = 'info', title = '', technicalDetails = null) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-portal-container';
+    container.setAttribute('role', 'region');
+    container.setAttribute('aria-live', 'polite');
+    document.body.appendChild(container);
+  }
+
+  const defaultTitles = {
+    success: 'Transaction Success',
+    error: 'Blockchain Error',
+    warning: 'Notice',
+    info: 'Information'
+  };
+
+  const toastTitle = title || defaultTitles[type] || 'Notice';
+  const toastId = 'toast_' + Date.now() + Math.random().toString(36).substring(2, 6);
+
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+
+  const toastEl = document.createElement('div');
+  toastEl.id = toastId;
+  toastEl.className = `toast-notification toast-${type}`;
+  toastEl.setAttribute('role', 'alert');
+
+  let techHtml = '';
+  if (technicalDetails && (technicalDetails.includes('docker') || technicalDetails.includes('Command failed') || technicalDetails.includes('chaincode'))) {
+    techHtml = `
+      <div class="toast-tech-section">
+        <button type="button" class="toast-tech-toggle" onclick="const p=document.getElementById('${toastId}_details'); p.style.display = p.style.display === 'none' ? 'block' : 'none';">
+          Details
+        </button>
+        <pre id="${toastId}_details" class="toast-tech-details" style="display: none;">${escapeHtml(technicalDetails)}</pre>
+      </div>
+    `;
+  }
+
+  toastEl.innerHTML = `
+    <div class="toast-content-wrapper">
+      <div class="toast-icon-col">
+        <span class="toast-icon ${type}" style="font-weight: bold; font-size: 16px;">${icons[type] || 'ℹ'}</span>
+      </div>
+      <div class="toast-body-col">
+        <div class="toast-header-row">
+          <h4 class="toast-title">${escapeHtml(toastTitle)}</h4>
+          <button type="button" class="toast-close-btn" onclick="document.getElementById('${toastId}')?.remove()">✕</button>
+        </div>
+        <p class="toast-message">${escapeHtml(message)}</p>
+        ${techHtml}
+      </div>
+    </div>
+  `;
+
+  container.appendChild(toastEl);
+
+  const duration = type === 'error' ? 7000 : 5000;
+  setTimeout(() => {
+    if (toastEl.parentNode) toastEl.remove();
+  }, duration);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function showConfirmDialog(title, message, onConfirm) {
+  const existing = document.getElementById('activeConfirmModal');
+  if (existing) existing.remove();
+
+  const modalEl = document.createElement('div');
+  modalEl.id = 'activeConfirmModal';
+  modalEl.className = 'modal-backdrop';
+  modalEl.innerHTML = `
+    <div class="modal-card" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-badge danger">🛡️</span>
+          <h3 class="modal-title-text">${escapeHtml(title)}</h3>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="document.getElementById('activeConfirmModal')?.remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-message-box">
+          <p>${escapeHtml(message)}</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" onclick="document.getElementById('activeConfirmModal')?.remove()">Cancel</button>
+        <button type="button" class="btn-danger" id="modalConfirmBtn">Confirm Action</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modalEl);
+  document.getElementById('modalConfirmBtn').addEventListener('click', () => {
+    modalEl.remove();
+    onConfirm();
+  });
+}
+
 // Academic Blockchain Frontend Application
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -132,13 +291,13 @@ function initStudentRegistration() {
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`✅ Student ${payload.studentId} successfully registered on Ledger (Org 1)!`);
+          showToast(`Student ${payload.studentId} successfully registered on Ledger (Org 1)!`, 'success', 'Student Registered');
           loadStudents();
         } else {
-          alert(`❌ Registration failed: ${data.error}`);
+          showToast(parseBlockchainError(data.error), 'error', 'Registration Rejected', data.error);
         }
       } catch (err) {
-        alert(`❌ Network error: ${err.message}`);
+        showToast(parseBlockchainError(err), 'error', 'Network Error', err.message);
       }
     });
   }
@@ -210,14 +369,14 @@ function initWorkflow() {
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`✅ Request ${requestId} submitted! Status: SUBMITTED`);
+          showToast(`Request ${requestId} submitted! Status: SUBMITTED`, 'success', 'Request Submitted');
           document.getElementById('activeReqInput').value = requestId;
           trackRequest(requestId);
         } else {
-          alert(`❌ Submission failed: ${data.error}`);
+          showToast(parseBlockchainError(data.error), 'error', 'Submission Rejected', data.error);
         }
       } catch (err) {
-        alert(`❌ Network error: ${err.message}`);
+        showToast(parseBlockchainError(err), 'error', 'Network Error', err.message);
       }
     });
   }
@@ -242,7 +401,7 @@ async function trackRequest(requestId) {
   try {
     const res = await fetch(`${API_BASE}/requests/${requestId}`);
     if (!res.ok) {
-      alert(`Request ${requestId} not found.`);
+      showToast(`Request ${requestId} not found on the ledger.`, 'warning', 'Record Not Found');
       return;
     }
     const request = await res.json();
@@ -255,7 +414,7 @@ async function trackRequest(requestId) {
       document.getElementById('issueCertId').value = `CERT-${request.requestId.replace('REQ-', '')}`;
     }
   } catch (err) {
-    alert(`Error tracking request: ${err.message}`);
+    showToast(parseBlockchainError(err), 'error', 'Tracking Error', err.message);
   }
 }
 
@@ -335,16 +494,16 @@ window.advanceStage = async function(endpoint, requestId, comments) {
     if (res.ok) {
       trackRequest(requestId);
     } else {
-      alert(`Approval failed: ${data.error}`);
+      showToast(parseBlockchainError(data.error), 'error', 'Approval Rejected', data.error);
     }
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    showToast(parseBlockchainError(err), 'error', 'Approval Error', err.message);
   }
 };
 
 async function autoAdvanceStages() {
   if (!currentTrackedRequest) {
-    alert('Please track a request first or submit a new one.');
+    showToast('Please track a request first or submit a new one.', 'warning', 'No Active Request');
     return;
   }
 
@@ -370,7 +529,7 @@ async function autoAdvanceStages() {
   }
 
   await trackRequest(reqId);
-  alert(`🎉 Auto-advanced request ${reqId} to ${currentTrackedRequest.status}!`);
+  showToast(`Auto-advanced request ${reqId} to ${currentTrackedRequest.status}!`, 'success', 'Workflow Advanced');
 }
 
 function renderHistory(history) {
@@ -398,12 +557,12 @@ async function executeCertificateIssuance() {
   const panel = document.getElementById('issueResultPanel');
 
   if (!certId) {
-    alert('Please enter a Certificate ID.');
+    showToast('Please enter a Certificate ID.', 'warning', 'Missing ID');
     return;
   }
 
   if (!currentTrackedRequest) {
-    alert('Please select or track an ADMIN_FINALIZED request first.');
+    showToast('Please select or track an ADMIN_FINALIZED request first.', 'warning', 'Action Prohibited');
     return;
   }
 
@@ -455,7 +614,7 @@ function initVerification() {
   if (idBtn) {
     idBtn.addEventListener('click', async () => {
       const certId = document.getElementById('verifyCertIdInput').value.trim();
-      if (!certId) return alert('Enter Certificate ID');
+      if (!certId) return showToast('Please enter a Certificate ID.', 'warning', 'Input Required');
       verifyEndpoint(`/verify/id/${certId}`);
     });
   }
@@ -463,7 +622,7 @@ function initVerification() {
   if (hashBtn) {
     hashBtn.addEventListener('click', async () => {
       const hash = document.getElementById('verifyHashInput').value.trim();
-      if (!hash) return alert('Enter SHA-256 Hash');
+      if (!hash) return showToast('Please enter a SHA-256 Hash.', 'warning', 'Input Required');
       verifyEndpoint(`/verify/hash/${hash}`);
     });
   }
@@ -472,7 +631,7 @@ function initVerification() {
     fileBtn.addEventListener('click', async () => {
       const fileInput = document.getElementById('verifyFileInput');
       if (!fileInput.files || fileInput.files.length === 0) {
-        return alert('Please select a certificate PDF file.');
+        return showToast('Please select a certificate PDF file.', 'warning', 'Input Required');
       }
 
       const formData = new FormData();
@@ -491,7 +650,7 @@ function initVerification() {
         const data = await res.json();
         renderVerificationBadge(data.verification, data.calculatedHash);
       } catch (err) {
-        alert(`Error verifying file: ${err.message}`);
+        showToast(parseBlockchainError(err), 'error', 'Verification Failed', err.message);
       }
     });
   }
@@ -508,7 +667,7 @@ async function verifyEndpoint(url) {
     const data = await res.json();
     renderVerificationBadge(data);
   } catch (err) {
-    alert(`Verification call failed: ${err.message}`);
+    showToast(parseBlockchainError(err), 'error', 'Verification Failed', err.message);
   }
 }
 
@@ -560,26 +719,28 @@ function initRevocation() {
     const reason = document.getElementById('revokeReason').value.trim();
     const revokedBy = document.getElementById('revokeOfficer').value.trim();
 
-    if (!confirm(`Are you sure you want to permanently revoke certificate ${certId} on the blockchain?`)) {
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/certificates/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ certId, reason, revokedBy })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`⚠️ Certificate ${certId} has been REVOKED on Hyperledger Fabric!`);
-        form.reset();
-      } else {
-        alert(`Revocation failed: ${data.error}`);
+    showConfirmDialog(
+      'Confirm Ledger Revocation',
+      `Are you sure you want to permanently revoke certificate ${certId} on the immutable Fabric ledger? This operation cannot be undone.`,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/certificates/revoke`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ certId, reason, revokedBy })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(`Certificate ${certId} has been PERMANENTLY REVOKED on Hyperledger Fabric!`, 'success', 'Certificate Revoked');
+            form.reset();
+          } else {
+            showToast(parseBlockchainError(data.error), 'error', 'Revocation Rejected', data.error);
+          }
+        } catch (err) {
+          showToast(parseBlockchainError(err), 'error', 'Revocation Network Error', err.message);
+        }
       }
-    } catch (err) {
-      alert(`Error: ${err.message}`);
-    }
+    );
   });
 }
 
@@ -636,7 +797,7 @@ function initLedgerHistory() {
     queryBtn.addEventListener('click', () => {
       const key = input.value.trim();
       if (!key) {
-        alert('Please enter a Certificate ID or Request ID to inspect.');
+        showToast('Please enter a Certificate ID or Request ID to inspect.', 'warning', 'Input Required');
         return;
       }
       queryKeyHistory(key);

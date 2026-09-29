@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Send, Zap, Clock, CheckCircle2, ChevronRight } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -21,50 +22,74 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [comments, setComments] = useState('');
 
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
+
   const generateReqId = () => {
     const rand = Math.floor(1000 + Math.random() * 9000);
-    setReqIdInput(`REQ-2024-${rand}`);
+    const newId = `REQ-2024-${rand}`;
+    setReqIdInput(newId);
+    showInfo(`Generated Request ID: ${newId}`, 'Auto-generated ID');
   };
 
   const handleRequestSubmit = async (e) => {
     e.preventDefault();
+    if (!reqIdInput.trim()) {
+      showWarning('Please provide a valid Request ID.', 'Missing ID');
+      return;
+    }
+    if (!studentId.trim()) {
+      showWarning('Please provide a registered Student ID.', 'Missing Student ID');
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: reqIdInput, studentId, certType })
+        body: JSON.stringify({ 
+          requestId: reqIdInput.trim(), 
+          studentId: studentId.trim(), 
+          certType 
+        })
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`Request ${reqIdInput} submitted! Current Status: SUBMITTED`);
-        setActiveReqInput(reqIdInput);
-        trackRequest(reqIdInput);
+        showSuccess(`Certificate Request ${reqIdInput} submitted successfully to the ledger! Status: SUBMITTED`, 'Request Submitted');
+        setActiveReqInput(reqIdInput.trim());
+        trackRequest(reqIdInput.trim());
       } else {
-        alert(`Submission failed: ${data.error}`);
+        showError(data.error || 'Request submission rejected by blockchain.', 'Submission Rejected');
       }
     } catch (err) {
-      alert(`Network error: ${err.message}`);
+      showError(err, 'Network Connection Error');
     }
   };
 
   const trackRequest = async (idToTrack) => {
     const id = idToTrack || activeReqInput;
-    if (!id) return;
+    if (!id || !id.trim()) {
+      showWarning('Please enter a Request ID to track.', 'Empty Lookup');
+      return;
+    }
     try {
-      const res = await fetch(`${API_BASE}/requests/${encodeURIComponent(id)}`);
+      const res = await fetch(`${API_BASE}/requests/${encodeURIComponent(id.trim())}`);
       if (!res.ok) {
-        alert(`Request ${id} not found.`);
+        showWarning(`Request ${id.trim()} was not found on the blockchain ledger.`, 'Record Not Found');
         return;
       }
       const data = await res.json();
       setCurrentRequest(data);
+      showInfo(`Loaded request ${data.requestId} (Status: ${data.status})`, 'Request Tracked');
     } catch (err) {
-      alert(`Error tracking request: ${err.message}`);
+      showError(err, 'Tracking Query Error');
     }
   };
 
   const advanceStage = async (endpoint, defaultComments) => {
-    if (!currentRequest) return;
+    if (!currentRequest) {
+      showWarning('Please track or select a request first.', 'No Active Request');
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await fetch(`${API_BASE}/workflow/${endpoint}`, {
@@ -78,12 +103,13 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
       const data = await res.json();
       if (res.ok) {
         setComments('');
+        showSuccess(`Stage transition recorded on blockchain! New status: ${data.status || 'Updated'}`, 'Stage Endorsed');
         await trackRequest(currentRequest.requestId);
       } else {
-        alert(`Approval failed: ${data.error}`);
+        showError(data.error || 'Stage approval rejected by chaincode policy.', 'Stage Approval Rejected');
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      showError(err, 'Endorsement Error');
     } finally {
       setActionLoading(false);
     }
@@ -91,7 +117,7 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
 
   const autoAdvanceStages = async () => {
     if (!currentRequest) {
-      alert('Please track or submit a request first.');
+      showWarning('Please track or submit a request first before auto-advancing.', 'No Active Request');
       return;
     }
     const reqId = currentRequest.requestId;
@@ -107,20 +133,25 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
     setActionLoading(true);
     try {
       for (const step of flow) {
-        const res = await fetch(`${API_BASE}/requests/${reqId}`);
+        const res = await fetch(`${API_BASE}/requests/${encodeURIComponent(reqId)}`);
         const cur = await res.json();
         if (cur.status === step.from) {
-          await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
+          const stepRes = await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requestId: reqId, comments: step.comment })
           });
+          if (!stepRes.ok) {
+            const errData = await stepRes.json();
+            showError(errData.error || `Step ${step.endpoint} failed.`, 'Workflow Halt');
+            break;
+          }
         }
       }
       await trackRequest(reqId);
-      alert(`🎉 Auto-advanced request ${reqId} to completed workflow state!`);
+      showSuccess(`🎉 Auto-advanced request ${reqId} through all endorsement stages to ADMIN_FINALIZED!`, 'Workflow Completed');
     } catch (err) {
-      alert(`Auto-advance error: ${err.message}`);
+      showError(err, 'Auto-Advance Sequence Error');
     } finally {
       setActionLoading(false);
     }

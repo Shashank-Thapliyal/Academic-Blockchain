@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Award, FileText, Globe, CheckCircle, Copy } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -9,6 +10,8 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
   const [issuedData, setIssuedData] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
 
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
+
   React.useEffect(() => {
     if (currentRequest?.status === 'ADMIN_FINALIZED') {
       setCertId(`CERT-${currentRequest.requestId.replace('REQ-', '')}`);
@@ -16,12 +19,16 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
   }, [currentRequest]);
 
   const handleIssue = async () => {
-    if (!certId) {
-      alert('Please enter a Certificate ID');
+    if (!certId.trim()) {
+      showWarning('Please enter a valid Certificate ID to issue.', 'Missing Certificate ID');
       return;
     }
     if (!currentRequest) {
-      alert('Please track an ADMIN_FINALIZED request first.');
+      showWarning('Please select or track an ADMIN_FINALIZED request first before issuing.', 'No Request Selected');
+      return;
+    }
+    if (currentRequest.status !== 'ADMIN_FINALIZED') {
+      showWarning(`Request is currently in stage '${currentRequest.status}'. It must reach 'ADMIN_FINALIZED' before Org 3 can anchor it.`, 'Prerequisite Not Met');
       return;
     }
 
@@ -33,7 +40,7 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          certId,
+          certId: certId.trim(),
           requestId: currentRequest.requestId,
           studentId: currentRequest.studentId,
           certType: currentRequest.certType
@@ -42,6 +49,7 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
       const data = await res.json();
       if (res.ok) {
         setIssuedData(data);
+        showSuccess(`Certificate ${data.certId} successfully minted, pinned to IPFS, and anchored to Fabric ledger!`, 'Certificate Anchored');
         // Refresh request
         const reqRes = await fetch(`${API_BASE}/requests/${currentRequest.requestId}`);
         if (reqRes.ok) {
@@ -49,18 +57,19 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
           setCurrentRequest(updated);
         }
       } else {
-        alert(`Issuance failed: ${data.error}`);
+        showError(data.error || 'Issuance transaction rejected by blockchain.', 'Issuance Rejected');
       }
     } catch (err) {
-      alert(`Issuance error: ${err.message}`);
+      showError(err, 'Network Connection Error');
     } finally {
       setLoading(false);
     }
   };
 
-  const copyToClipboard = (text, field) => {
+  const copyToClipboard = (text, field, label) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
+    showInfo(`${label} copied to clipboard!`);
     setTimeout(() => setCopiedField(null), 2000);
   };
 
@@ -120,7 +129,7 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
                   type="button" 
                   className="btn-secondary btn-sm"
                   style={{ marginLeft: '0.5rem', padding: '1px 6px' }}
-                  onClick={() => copyToClipboard(issuedData.ipfsCid, 'cid')}
+                  onClick={() => copyToClipboard(issuedData.ipfsCid, 'cid', 'IPFS CID')}
                 >
                   <Copy size={12} /> {copiedField === 'cid' ? 'Copied!' : 'Copy'}
                 </button>
@@ -133,7 +142,7 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
                   type="button" 
                   className="btn-secondary btn-sm"
                   style={{ marginLeft: '0.5rem', padding: '1px 6px' }}
-                  onClick={() => copyToClipboard(issuedData.sha256Hash, 'hash')}
+                  onClick={() => copyToClipboard(issuedData.sha256Hash, 'hash', 'SHA-256 Digest')}
                 >
                   <Copy size={12} /> {copiedField === 'hash' ? 'Copied!' : 'Copy'}
                 </button>

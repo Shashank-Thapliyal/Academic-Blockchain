@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../context/ToastContext';
 import { Database, RefreshCw, History, Activity, Radio, FileText } from 'lucide-react';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
 export default function LedgerExplorer() {
   const [certs, setCerts] = useState([]);
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [loadingCerts, setLoadingCerts] = useState(false);
   
   // History state
@@ -36,16 +38,26 @@ export default function LedgerExplorer() {
 
   const queryHistory = async () => {
     if (!historyKey.trim()) {
-      alert('Please enter a Certificate ID or Request ID.');
+      showWarning('Please enter a Certificate ID or Request ID.', 'Missing Identifier');
       return;
     }
     setHistoryLoading(true);
     try {
       const res = await fetch(`${API_BASE}/history/${encodeURIComponent(historyKey.trim())}`);
       const data = await res.json();
-      setHistoryRecords(data.history || []);
+      if (!res.ok) {
+        showError(data.error || 'History query failed', 'Provenance Query Failed');
+        return;
+      }
+      const historyList = data.history || [];
+      setHistoryRecords(historyList);
+      if (historyList.length > 0) {
+        showInfo(`Loaded ${historyList.length} provenance transactions for key '${historyKey.trim()}'.`, 'History Retrieved');
+      } else {
+        showWarning(`No transaction history found for key '${historyKey.trim()}'.`, 'Empty History');
+      }
     } catch (err) {
-      alert(`History query error: ${err.message}`);
+      showError(err, 'History Query Error');
     } finally {
       setHistoryLoading(false);
     }

@@ -1,3 +1,127 @@
+
+// ==========================================
+// In-App Toast & Error Sanitizer
+// ==========================================
+function parseBlockchainError(rawError) {
+  if (!rawError) return 'An unexpected blockchain error occurred.';
+  let str = typeof rawError === 'string' ? rawError : (rawError.error || rawError.message || JSON.stringify(rawError));
+  
+  const chaincodeMatch = str.match(/chaincode response \d+,\s*([^\n\r"'`]+)/i);
+  if (chaincodeMatch && chaincodeMatch[1]) return cleanSentence(chaincodeMatch[1]);
+  
+  const statusMsgMatch = str.match(/(?:status:\s*\d+,\s*message:\s*["'])([^"'\n\r]+)/i);
+  if (statusMsgMatch && statusMsgMatch[1]) return cleanSentence(statusMsgMatch[1]);
+
+  if (str.includes('already been revoked') || str.includes('already revoked')) {
+    return 'This certificate has already been revoked on the blockchain.';
+  }
+  if (str.includes('already exists') || str.includes('already registered')) {
+    const idMatch = str.match(/([A-Z0-9_-]+)\s+already (?:exists|registered)/i);
+    return idMatch ? `Record ${idMatch[1]} already exists on the ledger.` : 'This record already exists on the blockchain.';
+  }
+  if (str.includes('does not exist') || str.includes('not found')) {
+    return 'The requested record was not found on the Hyperledger Fabric ledger.';
+  }
+  if (str.includes('ECONNREFUSED') || str.includes('Network error')) {
+    return 'Consortium Network Error: Could not connect to the Fabric peer network.';
+  }
+  if (str.includes('docker exec') || str.includes('Command failed')) {
+    const lastErrorMatch = str.match(/(?:Error|error):\s*([^\n\r]+)$/);
+    if (lastErrorMatch && lastErrorMatch[1] && !lastErrorMatch[1].includes('docker')) {
+      return cleanSentence(lastErrorMatch[1]);
+    }
+    return 'Blockchain peer query rejected by the consortium network.';
+  }
+  return cleanSentence(str.split('\n')[0].replace(/^Error:\s*/i, ''));
+}
+
+function cleanSentence(text) {
+  let cleaned = text.trim();
+  if (cleaned.startsWith('Error:')) cleaned = cleaned.replace(/^Error:\s*/i, '');
+  if (cleaned.startsWith('error:')) cleaned = cleaned.replace(/^error:\s*/i, '');
+  if (cleaned.length > 0) cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  if (!cleaned.endsWith('.') && !cleaned.endsWith('!') && !cleaned.endsWith('?')) cleaned += '.';
+  return cleaned;
+}
+
+function showToast(message, type = 'info', title = '', technicalDetails = null) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-portal-container';
+    container.setAttribute('role', 'region');
+    container.setAttribute('aria-live', 'polite');
+    document.body.appendChild(container);
+  }
+
+  const defaultTitles = {
+    success: 'Verification Succeeded',
+    error: 'Verification Error',
+    warning: 'Notice',
+    info: 'Information'
+  };
+
+  const toastTitle = title || defaultTitles[type] || 'Notice';
+  const toastId = 'toast_' + Date.now() + Math.random().toString(36).substring(2, 6);
+
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+
+  const toastEl = document.createElement('div');
+  toastEl.id = toastId;
+  toastEl.className = `toast-notification toast-${type}`;
+  toastEl.setAttribute('role', 'alert');
+
+  let techHtml = '';
+  if (technicalDetails && (technicalDetails.includes('docker') || technicalDetails.includes('Command failed') || technicalDetails.includes('chaincode'))) {
+    techHtml = `
+      <div class="toast-tech-section">
+        <button type="button" class="toast-tech-toggle" onclick="const p=document.getElementById('${toastId}_details'); p.style.display = p.style.display === 'none' ? 'block' : 'none';">
+          Details
+        </button>
+        <pre id="${toastId}_details" class="toast-tech-details" style="display: none;">${escapeHtml(technicalDetails)}</pre>
+      </div>
+    `;
+  }
+
+  toastEl.innerHTML = `
+    <div class="toast-content-wrapper">
+      <div class="toast-icon-col">
+        <span class="toast-icon ${type}" style="font-weight: bold; font-size: 16px;">${icons[type] || 'ℹ'}</span>
+      </div>
+      <div class="toast-body-col">
+        <div class="toast-header-row">
+          <h4 class="toast-title">${escapeHtml(toastTitle)}</h4>
+          <button type="button" class="toast-close-btn" onclick="document.getElementById('${toastId}')?.remove()">✕</button>
+        </div>
+        <p class="toast-message">${escapeHtml(message)}</p>
+        ${techHtml}
+      </div>
+    </div>
+  `;
+
+  container.appendChild(toastEl);
+
+  const duration = type === 'error' ? 7000 : 5000;
+  setTimeout(() => {
+    if (toastEl.parentNode) toastEl.remove();
+  }, duration);
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 'use strict';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
@@ -154,7 +278,7 @@ function setupEventListeners() {
 
 async function startCameraScanner() {
   if (typeof Html5Qrcode === 'undefined') {
-    alert('QR scanning library is loading. Please check internet access or try uploading the QR image.');
+    showToast('QR scanning library is initializing. Please check internet access or try uploading the QR image.', 'warning', 'Scanner Initializing');
     return;
   }
 
@@ -182,7 +306,7 @@ async function startCameraScanner() {
       () => {}
     );
   } catch (err) {
-    alert(`Could not start camera: ${err.message || err}. You can also upload a QR image.`);
+    showToast(`Could not start camera: ${err.message || err}. You can also upload a QR image.`, 'error', 'Camera Error');
     stopCameraScanner();
   }
 }
@@ -215,7 +339,7 @@ async function handleQrFileSelect(e) {
 async function handleQrFile(file) {
   if (!file) return;
   if (typeof Html5Qrcode === 'undefined') {
-    alert('QR library not loaded yet');
+    showToast('QR library is still loading. Please retry in a few seconds.', 'warning', 'Library Loading');
     return;
   }
 
@@ -224,7 +348,7 @@ async function handleQrFile(file) {
     const decodedText = await scanner.scanFile(file, true);
     handleDecodedQrText(decodedText);
   } catch (err) {
-    alert('No clear QR code could be found in the uploaded image.');
+    showToast('No clear QR code could be found in the uploaded image. Please ensure the QR is clear and well-lit.', 'warning', 'QR Not Detected');
   }
 }
 
@@ -272,7 +396,7 @@ function handlePdfFileSelect(e) {
 
 function setPdfFile(file) {
   if (!file.name.toLowerCase().endsWith('.pdf')) {
-    alert('Please select a valid PDF file.');
+    showToast('Please select a valid PDF certificate file.', 'warning', 'Invalid File Type');
     return;
   }
   selectedPdfFile = file;
@@ -295,7 +419,7 @@ async function verifySelectedPdf() {
 
     await verifyByHash(calculatedHash, selectedPdfFile.name);
   } catch (err) {
-    alert(`Verification error: ${err.message}`);
+    showToast(parseBlockchainError(err), 'error', 'Verification Failed', err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Verify PDF Hash on Ledger';

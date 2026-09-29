@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useToast } from '../context/ToastContext';
+import { parseBlockchainError } from '../utils/errorHandler';
 import { Camera, FileText, Search, CheckCircle2, AlertTriangle, XCircle, Printer, Download, Globe, Shield } from 'lucide-react';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
 export default function EmployerPortal({ isStandalone = false }) {
+  const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [activeOption, setActiveOption] = useState('qr');
   const [manualInput, setManualInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,13 +29,27 @@ export default function EmployerPortal({ isStandalone = false }) {
   }, []);
 
   const verifyById = async (id) => {
+    if (!id || !id.trim()) {
+      showWarning('Please enter a Certificate ID to verify.', 'Empty Identifier');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/verify/id/${encodeURIComponent(id)}`);
+      const res = await fetch(`${API_BASE}/verify/id/${encodeURIComponent(id.trim())}`);
       const data = await res.json();
       setResult(data);
+      if (data.verificationStatus === 'VALID' || data.verified) {
+        showSuccess(`Certificate ${id} verified authentic on Hyperledger Fabric ledger!`, 'Verification Confirmed');
+      } else if (data.verificationStatus === 'REVOKED') {
+        showError(`Certificate ${id} has been permanently REVOKED on the blockchain.`, 'Credential Revoked');
+      } else if (data.verificationStatus === 'NOT_FOUND') {
+        showWarning(`Certificate ${id} was not found on the blockchain ledger.`, 'Record Not Found');
+      } else if (data.error) {
+        showError(data.error, 'Verification Query Rejected');
+      }
     } catch (err) {
-      setResult({ verificationStatus: 'ERROR', message: err.message });
+      showError(err, 'Verification Network Error');
+      setResult({ verificationStatus: 'ERROR', message: parseBlockchainError(err) });
     } finally {
       setLoading(false);
     }
@@ -44,8 +61,18 @@ export default function EmployerPortal({ isStandalone = false }) {
       const res = await fetch(`${API_BASE}/verify/hash/${encodeURIComponent(hash)}`);
       const data = await res.json();
       setResult({ ...data, uploadedFileName: fileName });
+      if (data.verificationStatus === 'VALID' || data.verified) {
+        showSuccess('Cryptographic SHA-256 fingerprint matches ledger record exactly!', 'Integrity Verified');
+      } else if (data.verificationStatus === 'REVOKED') {
+        showError('The certificate corresponding to this document has been REVOKED.', 'Certificate Revoked');
+      } else if (data.verificationStatus === 'INVALID' || data.verificationStatus === 'TAMPERED') {
+        showError('SHA-256 digest mismatch! Document has been altered or tampered with.', 'Tamper Detected');
+      } else if (data.verificationStatus === 'NOT_FOUND') {
+        showWarning('This document fingerprint was not found on the blockchain ledger.', 'Unrecognized Document');
+      }
     } catch (err) {
-      setResult({ verificationStatus: 'ERROR', message: err.message });
+      showError(err, 'Verification Error');
+      setResult({ verificationStatus: 'ERROR', message: parseBlockchainError(err) });
     } finally {
       setLoading(false);
     }
@@ -53,7 +80,7 @@ export default function EmployerPortal({ isStandalone = false }) {
 
   const handlePdfUpload = async (file) => {
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Please upload a valid PDF document.');
+      showWarning('Please upload a valid PDF document.', 'Invalid File Format');
       return;
     }
     setSelectedPdf(file);
@@ -67,14 +94,14 @@ export default function EmployerPortal({ isStandalone = false }) {
       
       await verifyByHash(calculatedHash, file.name);
     } catch (err) {
-      alert(`Error computing SHA-256: ${err.message}`);
+      showError(err, 'SHA-256 Calculation Error');
       setLoading(false);
     }
   };
 
   const startCamera = async () => {
     if (typeof window.Html5Qrcode === 'undefined') {
-      alert('QR camera scanner library is still initializing. You can also upload a QR image.');
+      showWarning('QR camera scanner library is still initializing. You can also upload a QR image.', 'Camera Initializing');
       return;
     }
     try {
@@ -90,7 +117,7 @@ export default function EmployerPortal({ isStandalone = false }) {
         () => {}
       );
     } catch (err) {
-      alert(`Camera access error: ${err.message}`);
+      showError(err, 'Camera Access Error');
       setIsCameraActive(false);
     }
   };
@@ -190,7 +217,7 @@ export default function EmployerPortal({ isStandalone = false }) {
                     const reader = new window.Html5Qrcode('qrReader');
                     reader.scanFile(e.target.files[0], true)
                       .then(handleQrDecoded)
-                      .catch(() => alert('No readable QR code found in this image.'));
+                      .catch(() => showWarning('No readable QR code found in this image. Please upload a clear QR code image.', 'QR Not Detected'));
                   }
                 }}
               />

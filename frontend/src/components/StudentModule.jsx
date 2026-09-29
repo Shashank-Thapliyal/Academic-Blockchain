@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { parseBlockchainError } from '../utils/errorHandler';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -16,6 +18,8 @@ export default function StudentModule() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
 
+  const { showSuccess, showError, showInfo } = useToast();
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -30,6 +34,7 @@ export default function StudentModule() {
       }
     } catch (err) {
       console.error('Error fetching students:', err);
+      showError(err, 'Failed to Fetch Students');
     } finally {
       setLoading(false);
     }
@@ -48,7 +53,9 @@ export default function StudentModule() {
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: 'success', text: `Student ${formData.studentId} registered successfully on Ledger (Org 1)!` });
+        const successText = `Student ${formData.studentId} registered successfully on Ledger (Org 1)!`;
+        setMessage({ type: 'success', text: successText });
+        showSuccess(successText, 'Student Registered');
         setFormData({
           studentId: '',
           name: '',
@@ -58,10 +65,14 @@ export default function StudentModule() {
         });
         fetchStudents();
       } else {
-        setMessage({ type: 'error', text: data.error || 'Failed to register student' });
+        const cleanErr = parseBlockchainError(data.error || 'Failed to register student');
+        setMessage({ type: 'error', text: cleanErr });
+        showError(data.error || 'Failed to register student', 'Registration Rejected');
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      const cleanErr = parseBlockchainError(err);
+      setMessage({ type: 'error', text: cleanErr });
+      showError(err, 'Network Connection Error');
     } finally {
       setSubmitting(false);
     }

@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { parseBlockchainError } from '../utils/errorHandler';
+import ConfirmModal from './ConfirmModal';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -9,18 +12,20 @@ export default function RevocationModule() {
   const [officer, setOfficer] = useState('Dean / Controller of Academic Integrity');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  const handleRevoke = async (e) => {
+  const { showSuccess, showError, showWarning } = useToast();
+
+  const handleOpenConfirm = (e) => {
     e.preventDefault();
-    if (!certId || !reason) {
-      alert('Please fill out Certificate ID and Revocation Reason.');
+    if (!certId.trim() || !reason.trim()) {
+      showWarning('Please enter both the Certificate ID and the Official Revocation Reason.', 'Missing Fields');
       return;
     }
+    setIsConfirmOpen(true);
+  };
 
-    if (!window.confirm(`⚠️ WARNING: Are you sure you want to permanently revoke certificate ${certId} on the immutable Fabric ledger? This operation cannot be undone.`)) {
-      return;
-    }
-
+  const handleConfirmRevoke = async () => {
     setLoading(true);
     setMessage(null);
 
@@ -29,21 +34,30 @@ export default function RevocationModule() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          certId,
-          reason,
+          certId: certId.trim(),
+          reason: reason.trim(),
           revokedBy: officer
         })
       });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: 'success', text: `Certificate ${certId} successfully REVOKED on Hyperledger Fabric ledger!` });
+        const successText = `Certificate ${certId.trim()} has been PERMANENTLY REVOKED on Hyperledger Fabric ledger!`;
+        setMessage({ type: 'success', text: successText });
+        showSuccess(successText, 'Certificate Revoked');
         setCertId('');
         setReason('');
+        setIsConfirmOpen(false);
       } else {
-        setMessage({ type: 'error', text: data.error || 'Revocation failed' });
+        const cleanErr = parseBlockchainError(data.error || 'Revocation failed');
+        setMessage({ type: 'error', text: cleanErr });
+        showError(data.error || 'Revocation failed', 'Revocation Rejected');
+        setIsConfirmOpen(false);
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err.message });
+      const cleanErr = parseBlockchainError(err);
+      setMessage({ type: 'error', text: cleanErr });
+      showError(err, 'Network Connection Error');
+      setIsConfirmOpen(false);
     } finally {
       setLoading(false);
     }
@@ -70,7 +84,7 @@ export default function RevocationModule() {
         </div>
       )}
 
-      <form id="revokeForm" onSubmit={handleRevoke}>
+      <form id="revokeForm" onSubmit={handleOpenConfirm}>
         <div className="form-group">
           <label htmlFor="revokeCertId">Certificate ID to Revoke:</label>
           <input 
@@ -110,9 +124,28 @@ export default function RevocationModule() {
           className="btn-danger full-width"
           disabled={loading}
         >
-          {loading ? 'Executing Revocation on Ledger...' : '⚠️ Execute Immutable Revocation on Blockchain'}
+          {loading ? 'Processing...' : '⚠️ Execute Immutable Revocation on Blockchain'}
         </button>
       </form>
+
+      <ConfirmModal
+        isOpen={isConfirmOpen}
+        title="Confirm Ledger Revocation"
+        message={
+          <div>
+            <p>Are you sure you want to permanently revoke certificate <strong>{certId}</strong>?</p>
+            <p style={{ marginTop: '0.5rem', color: 'var(--danger)', fontSize: '0.85rem' }}>
+              ⚠️ This writes a permanent revocation transaction to the immutable Hyperledger Fabric ledger and cannot be undone.
+            </p>
+          </div>
+        }
+        confirmText="Confirm Permanent Revocation"
+        cancelText="Cancel"
+        variant="danger"
+        loading={loading}
+        onConfirm={handleConfirmRevoke}
+        onCancel={() => setIsConfirmOpen(false)}
+      />
     </div>
   );
 }
