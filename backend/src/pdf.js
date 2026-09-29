@@ -234,9 +234,14 @@ async function generateCertificatePDF(certData) {
       doc.fontSize(18).font("Helvetica-Bold").fillColor("#0369a1")
          .text(degreeTitle, 45, y, { width: width - 90, align: "center", characterSpacing: 0.5 });
 
-      y += 22;
-      doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#854d0e")
-         .text("WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION", 45, y, { width: width - 90, align: "center", characterSpacing: 1.5 });
+      const honorsText = certData.honors || certData.grade || "WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION";
+      if (honorsText && honorsText.toUpperCase() !== "NONE") {
+        y += 22;
+        doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#854d0e")
+           .text(honorsText, 45, y, { width: width - 90, align: "center", characterSpacing: 1.5 });
+      } else {
+        y += 8;
+      }
 
       let formattedDate = "";
       try {
@@ -316,29 +321,26 @@ async function generateCertificatePDF(certData) {
         doc.restore();
       };
 
-      // Org 1 Signature (Academic)
+      // Org 1 Signature (Academic Authority)
       const col1X = 135;
       drawSignatureFlourish(col1X, sigY);
       doc.lineWidth(0.75).strokeColor("#0c2340").moveTo(col1X, sigY).lineTo(col1X + sigColWidth, sigY).stroke();
-      doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0c2340").text("Prof. Rajesh K. Sharma, Ph.D.", col1X, sigY + 6, { width: sigColWidth, align: "center" });
-      doc.fontSize(8).font("Helvetica").fillColor("#334155").text("Head of Department", col1X, sigY + 18, { width: sigColWidth, align: "center" });
-      doc.fontSize(7).font("Helvetica-Bold").fillColor("#0284c7").text("Org 1: Academic Authority (Org1MSP)", col1X, sigY + 28, { width: sigColWidth, align: "center" });
+      doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#0c2340").text("Head of Department", col1X, sigY + 8, { width: sigColWidth, align: "center" });
+      doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#0284c7").text("Org 1: Academic Authority (Org1MSP)", col1X, sigY + 22, { width: sigColWidth, align: "center" });
 
-      // Org 2 Signature (Exam Board)
+      // Org 2 Signature (Exam Board Authority)
       const col2X = width / 2 - sigColWidth / 2;
       drawSignatureFlourish(col2X, sigY);
       doc.lineWidth(0.75).strokeColor("#0c2340").moveTo(col2X, sigY).lineTo(col2X + sigColWidth, sigY).stroke();
-      doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0c2340").text("Dr. Anita Deshmukh", col2X, sigY + 6, { width: sigColWidth, align: "center" });
-      doc.fontSize(8).font("Helvetica").fillColor("#334155").text("Controller of Examinations", col2X, sigY + 18, { width: sigColWidth, align: "center" });
-      doc.fontSize(7).font("Helvetica-Bold").fillColor("#d97706").text("Org 2: Evaluation Authority (Org2MSP)", col2X, sigY + 28, { width: sigColWidth, align: "center" });
+      doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#0c2340").text("Controller of Examinations", col2X, sigY + 8, { width: sigColWidth, align: "center" });
+      doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#d97706").text("Org 2: Evaluation Authority (Org2MSP)", col2X, sigY + 22, { width: sigColWidth, align: "center" });
 
-      // Org 3 Signature (Registry & Governance)
+      // Org 3 Signature (Registry & Central Governance)
       const col3X = width - sigColWidth - 45;
       drawSignatureFlourish(col3X, sigY);
       doc.lineWidth(0.75).strokeColor("#0c2340").moveTo(col3X, sigY).lineTo(col3X + sigColWidth, sigY).stroke();
-      doc.fontSize(9.5).font("Helvetica-Bold").fillColor("#0c2340").text("Dr. Vikramaditya Sen", col3X, sigY + 6, { width: sigColWidth, align: "center" });
-      doc.fontSize(8).font("Helvetica").fillColor("#334155").text("Dean of Academic Affairs & Registrar", col3X, sigY + 18, { width: sigColWidth, align: "center" });
-      doc.fontSize(7).font("Helvetica-Bold").fillColor("#059669").text("Org 3: Central Governance (Org3MSP)", col3X, sigY + 28, { width: sigColWidth, align: "center" });
+      doc.fontSize(10.5).font("Helvetica-Bold").fillColor("#0c2340").text("Dean of Academic Affairs & Registrar", col3X, sigY + 8, { width: sigColWidth, align: "center" });
+      doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#059669").text("Org 3: Central Governance (Org3MSP)", col3X, sigY + 22, { width: sigColWidth, align: "center" });
 
       // ==========================================
       // 10. Security Micro-Strip Footer

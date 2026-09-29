@@ -462,7 +462,24 @@ function renderActionControls(request) {
       html = `<button class="btn-primary" onclick="advanceStage('dac-approve', '${reqId}', 'Department Academic Committee approval complete')">✍️ Org 1: Approve as DAC</button>`;
       break;
     case 'DAC_APPROVED':
-      html = `<button class="btn-primary" style="background:#f59e0b;" onclick="advanceStage('exam-lock', '${reqId}', 'Grades locked by Controller of Examinations')">🔒 Org 2: Lock Exam Grades</button>`;
+      html = `
+        <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 0.8rem; width: 100%;">
+          <div style="font-weight: 600; color: #f59e0b; margin-bottom: 0.4rem;">🔒 Org 2 Exam Board: Grade Student & Decide Honors</div>
+          <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Select the academic honors line to permanently seal and print on the certificate:</p>
+          <div style="margin-bottom: 0.5rem;">
+            <select id="examHonorsSelect" style="width: 100%; padding: 0.4rem; font-size: 0.82rem; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">
+              <option value="WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION">With First Class Honors & Academic Distinction (CGPA 9.0+)</option>
+              <option value="WITH FIRST CLASS HONORS">With First Class Honors (CGPA 7.5 - 8.9)</option>
+              <option value="WITH SECOND CLASS HONORS (DIVISION I)">With Second Class Honors - Division I (CGPA 6.5 - 7.4)</option>
+              <option value="WITH SECOND CLASS HONORS (DIVISION II)">With Second Class Honors - Division II (CGPA 5.5 - 6.4)</option>
+              <option value="WITH PASS DIVISION">With Pass Division (CGPA 4.5 - 5.4)</option>
+              <option value="WITH HIGHEST DISTINCTION & DEAN'S MERIT LIST">With Highest Distinction & Dean's Merit List</option>
+              <option value="NONE">Confer Degree Without Honors Line</option>
+            </select>
+          </div>
+          <button class="btn-primary" style="background:#d97706; width: 100%;" onclick="lockExamGradesWithHonors('${reqId}')">🔒 Lock Exam Grades & Concur Honors</button>
+        </div>
+      `;
       break;
     case 'EXAM_LOCKED':
       html = `<button class="btn-primary" style="background:#10b981;" onclick="advanceStage('dean-approve', '${reqId}', 'Dean Academic clearance granted')">✍️ Org 3: Sanction as Dean</button>`;
@@ -482,6 +499,34 @@ function renderActionControls(request) {
 
   container.innerHTML = html;
 }
+
+window.lockExamGradesWithHonors = async function(requestId) {
+  const sel = document.getElementById("examHonorsSelect");
+  const honors = sel ? sel.value : "WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION";
+  try {
+    const res = await fetch(`${API_BASE}/workflow/exam-lock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId,
+        examOfficerId: "ExamController-Org2",
+        grade: "A+",
+        cgpa: "9.20",
+        honors,
+        comments: `Examination transcripts verified & locked: ${honors}`
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(`Exam grades locked: "${honors}"`, "success", "Exam Sealed");
+      trackRequest(requestId);
+    } else {
+      showToast(parseBlockchainError(data.error), "error", "Exam Lock Rejected");
+    }
+  } catch (err) {
+    showToast(parseBlockchainError(err), "error", "Network Error");
+  }
+};
 
 window.advanceStage = async function(endpoint, requestId, comments) {
   try {

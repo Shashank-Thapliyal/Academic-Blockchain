@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Zap, Clock, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Send, Zap, Clock, CheckCircle2, ChevronRight, Award, Lock } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
@@ -17,10 +17,18 @@ const STAGES = [
 export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
   const [reqIdInput, setReqIdInput] = useState('');
   const [studentId, setStudentId] = useState('');
-  const [certType, setCertType] = useState('Bachelor of Technology in CSE');
+  const [certType, setCertType] = useState('Bachelor of Technology in Computer Science & Engineering');
+  const [customCertType, setCustomCertType] = useState('');
   const [activeReqInput, setActiveReqInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [comments, setComments] = useState('');
+
+  // Exam Grading states (Org 2)
+  const [examClassification, setExamClassification] = useState('WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION');
+  const [examCgpa, setExamCgpa] = useState('9.42');
+  const [examGradeLetter, setExamGradeLetter] = useState('A+');
+  const [customHonors, setCustomHonors] = useState('');
+  const [examComments, setExamComments] = useState('Transcripts and curriculum credits audited; examination records locked.');
 
   const { showSuccess, showError, showWarning, showInfo } = useToast();
 
@@ -49,7 +57,7 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
         body: JSON.stringify({ 
           requestId: reqIdInput.trim(), 
           studentId: studentId.trim(), 
-          certType 
+          certType: certType === 'CUSTOM' ? customCertType.trim() : certType
         })
       });
       const data = await res.json();
@@ -121,13 +129,22 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
       return;
     }
     const reqId = currentRequest.requestId;
+    const finalHonors = examClassification === 'CUSTOM' ? (customHonors.trim() || 'WITH FIRST CLASS HONORS') : examClassification;
     const flow = [
-      { endpoint: 'faculty-approve', from: 'SUBMITTED', comment: 'Auto-approved by Faculty' },
-      { endpoint: 'hod-approve', from: 'FACULTY_APPROVED', comment: 'Auto-approved by HOD' },
-      { endpoint: 'dac-approve', from: 'HOD_APPROVED', comment: 'Auto-approved by DAC' },
-      { endpoint: 'exam-lock', from: 'DAC_APPROVED', comment: 'Auto-locked by Exam Board' },
-      { endpoint: 'dean-approve', from: 'EXAM_LOCKED', comment: 'Auto-sanctioned by Dean' },
-      { endpoint: 'admin-finalize', from: 'DEAN_APPROVED', comment: 'Auto-finalized by Administration' }
+      { endpoint: 'faculty-approve', from: 'SUBMITTED', body: { requestId: reqId, comments: 'Auto-approved by Faculty' } },
+      { endpoint: 'hod-approve', from: 'FACULTY_APPROVED', body: { requestId: reqId, comments: 'Auto-approved by HOD' } },
+      { endpoint: 'dac-approve', from: 'HOD_APPROVED', body: { requestId: reqId, comments: 'Auto-approved by DAC' } },
+      { endpoint: 'exam-lock', from: 'DAC_APPROVED', body: { 
+          requestId: reqId, 
+          examOfficerId: 'ExamController-Org2', 
+          grade: examGradeLetter || 'A+', 
+          cgpa: examCgpa || '9.42', 
+          honors: finalHonors, 
+          comments: `Auto-locked by Exam Board: ${finalHonors}` 
+        } 
+      },
+      { endpoint: 'dean-approve', from: 'EXAM_LOCKED', body: { requestId: reqId, comments: 'Auto-sanctioned by Dean' } },
+      { endpoint: 'admin-finalize', from: 'DEAN_APPROVED', body: { requestId: reqId, comments: 'Auto-finalized by Administration' } }
     ];
 
     setActionLoading(true);
@@ -139,7 +156,7 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
           const stepRes = await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requestId: reqId, comments: step.comment })
+            body: JSON.stringify(step.body)
           });
           if (!stepRes.ok) {
             const errData = await stepRes.json();
@@ -204,17 +221,56 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="reqCertType">Degree / Certificate Type:</label>
+            <label htmlFor="reqCertType">Degree / Academic Program:</label>
             <select 
               id="reqCertType"
               value={certType}
               onChange={(e) => setCertType(e.target.value)}
             >
-              <option value="Bachelor of Technology in CSE">Bachelor of Technology in CSE</option>
-              <option value="Master of Science in Data Science">Master of Science in Data Science</option>
-              <option value="Bachelor of Science in AI & Robotics">Bachelor of Science in AI & Robotics</option>
-              <option value="Executive Post Graduate Diploma">Executive Post Graduate Diploma</option>
+              <optgroup label="Undergraduate Degrees (Bachelor's)">
+                <option value="Bachelor of Technology in Computer Science & Engineering">Bachelor of Technology in Computer Science & Engineering (B.Tech CSE)</option>
+                <option value="Bachelor of Technology in Electronics & Communication Engineering">Bachelor of Technology in Electronics & Communication Engineering (B.Tech ECE)</option>
+                <option value="Bachelor of Technology in Electrical & Electronics Engineering">Bachelor of Technology in Electrical & Electronics Engineering (B.Tech EEE)</option>
+                <option value="Bachelor of Technology in Mechanical Engineering">Bachelor of Technology in Mechanical Engineering (B.Tech ME)</option>
+                <option value="Bachelor of Technology in Civil Engineering">Bachelor of Technology in Civil Engineering (B.Tech CE)</option>
+                <option value="Bachelor of Technology in Information Technology">Bachelor of Technology in Information Technology (B.Tech IT)</option>
+                <option value="Bachelor of Technology in Chemical Engineering">Bachelor of Technology in Chemical Engineering (B.Tech CHE)</option>
+                <option value="Bachelor of Science in Artificial Intelligence & Robotics">Bachelor of Science in Artificial Intelligence & Robotics</option>
+                <option value="Bachelor of Science in Data Science & Analytics">Bachelor of Science in Data Science & Analytics</option>
+                <option value="Bachelor of Computer Applications">Bachelor of Computer Applications (BCA)</option>
+                <option value="Bachelor of Business Administration">Bachelor of Business Administration (BBA)</option>
+              </optgroup>
+              <optgroup label="Postgraduate Degrees (Master's)">
+                <option value="Master of Technology in Computer Science & Engineering">Master of Technology in Computer Science & Engineering (M.Tech CSE)</option>
+                <option value="Master of Technology in Artificial Intelligence">Master of Technology in Artificial Intelligence (M.Tech AI)</option>
+                <option value="Master of Technology in VLSI & Embedded Systems">Master of Technology in VLSI & Embedded Systems</option>
+                <option value="Master of Computer Applications">Master of Computer Applications (MCA)</option>
+                <option value="Master of Science in Data Science">Master of Science in Data Science</option>
+                <option value="Master of Science in Cybersecurity & Information Assurance">Master of Science in Cybersecurity & Information Assurance</option>
+                <option value="Master of Business Administration">Master of Business Administration (MBA)</option>
+              </optgroup>
+              <optgroup label="Doctoral Degrees (Ph.D.)">
+                <option value="Doctor of Philosophy in Computer Science & Engineering">Doctor of Philosophy in Computer Science & Engineering (Ph.D.)</option>
+                <option value="Doctor of Philosophy in Electrical Sciences">Doctor of Philosophy in Electrical Sciences (Ph.D.)</option>
+              </optgroup>
+              <optgroup label="Executive & Diplomas">
+                <option value="Executive Post Graduate Diploma in Blockchain Technologies">Executive Post Graduate Diploma in Blockchain Technologies</option>
+                <option value="Post Graduate Diploma in Cloud & Distributed Systems">Post Graduate Diploma in Cloud & Distributed Systems</option>
+              </optgroup>
+              <optgroup label="Custom Option">
+                <option value="CUSTOM">-- Enter Custom Degree Title --</option>
+              </optgroup>
             </select>
+            {certType === 'CUSTOM' && (
+              <input 
+                type="text" 
+                placeholder="e.g. Bachelor of Arts in Economics & Public Policy" 
+                value={customCertType}
+                onChange={(e) => setCustomCertType(e.target.value)}
+                style={{ marginTop: "0.5rem" }}
+                required
+              />
+            )}
           </div>
 
           <button type="submit" className="btn-primary full-width" id="submitReqBtn">
@@ -308,14 +364,87 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
                 ✍️ Org 1: Approve as DAC
               </button>
             ) : currentStatus === 'DAC_APPROVED' ? (
-              <button 
-                className="btn-primary" 
-                style={{ background: '#f59e0b' }}
-                onClick={() => advanceStage('exam-lock', 'Grades locked by Controller of Examinations')}
-                disabled={actionLoading}
-              >
-                🔒 Org 2: Lock Exam Grades
-              </button>
+              <div className="exam-grading-panel" style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "var(--radius-md)", padding: "1rem", width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <Award size={18} style={{ color: "#f59e0b" }} />
+                  <h4 style={{ margin: 0, color: "#f59e0b", fontSize: "0.95rem" }}>Org 2 Examination Board: Grade Student & Decide Honors</h4>
+                </div>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "0.75rem" }}>
+                  Select or write the academic classification line that will be permanently sealed on ledger and printed on the student's certificate:
+                </p>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                  <div>
+                    <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "0.25rem" }}>Degree Honors / Classification:</label>
+                    <select 
+                      value={examClassification} 
+                      onChange={(e) => setExamClassification(e.target.value)}
+                      style={{ width: "100%", fontSize: "0.82rem", padding: "0.4rem" }}
+                    >
+                      <option value="WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION">With First Class Honors & Academic Distinction (CGPA 9.0+)</option>
+                      <option value="WITH FIRST CLASS HONORS">With First Class Honors (CGPA 7.5 - 8.9)</option>
+                      <option value="WITH SECOND CLASS HONORS (DIVISION I)">With Second Class Honors - Division I (CGPA 6.5 - 7.4)</option>
+                      <option value="WITH SECOND CLASS HONORS (DIVISION II)">With Second Class Honors - Division II (CGPA 5.5 - 6.4)</option>
+                      <option value="WITH PASS DIVISION">With Pass Division (CGPA 4.5 - 5.4)</option>
+                      <option value="WITH HIGHEST DISTINCTION & DEAN'S MERIT LIST">With Highest Distinction & Dean's Merit List</option>
+                      <option value="NONE">Confer Degree Without Honors Line</option>
+                      <option value="CUSTOM">-- Enter Custom Honors Line --</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "0.25rem" }}>CGPA / Grade Letter:</label>
+                    <div style={{ display: "flex", gap: "0.3rem" }}>
+                      <input 
+                        type="text" 
+                        placeholder="9.42" 
+                        value={examCgpa} 
+                        onChange={(e) => setExamCgpa(e.target.value)} 
+                        style={{ width: "60%", fontSize: "0.82rem", padding: "0.4rem" }} 
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="A+" 
+                        value={examGradeLetter} 
+                        onChange={(e) => setExamGradeLetter(e.target.value)} 
+                        style={{ width: "40%", fontSize: "0.82rem", padding: "0.4rem" }} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {examClassification === "CUSTOM" && (
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "0.25rem" }}>Custom Certificate Text:</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. WITH HIGHEST HONORS & PRESIDENTIAL GOLD MEDAL" 
+                      value={customHonors} 
+                      onChange={(e) => setCustomHonors(e.target.value)}
+                      style={{ width: "100%", fontSize: "0.82rem", padding: "0.4rem" }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <label style={{ fontSize: "0.75rem", color: "var(--text-secondary)", display: "block", marginBottom: "0.25rem" }}>Examination Remarks:</label>
+                  <input 
+                    type="text" 
+                    value={examComments} 
+                    onChange={(e) => setExamComments(e.target.value)} 
+                    style={{ width: "100%", fontSize: "0.82rem", padding: "0.4rem" }}
+                  />
+                </div>
+
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  style={{ background: "#d97706", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
+                  onClick={handleLockGrades}
+                  disabled={actionLoading}
+                >
+                  <Lock size={14} /> 🔒 Org 2: Lock Exam Grades & Seal Classification
+                </button>
+              </div>
             ) : currentStatus === 'EXAM_LOCKED' ? (
               <button 
                 className="btn-primary" 

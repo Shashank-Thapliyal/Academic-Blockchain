@@ -292,14 +292,21 @@ app.post('/api/workflow/dac-approve', async (req, res) => {
 
 app.post('/api/workflow/exam-lock', async (req, res) => {
   try {
-    const { requestId, examOfficerId, gradesHash, comments } = req.body;
+    const { requestId, examOfficerId, gradesHash, comments, grade, cgpa, honors } = req.body;
+    const payload = {
+      grade: grade || "A+",
+      cgpa: cgpa || "9.0",
+      honors: honors || "WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION",
+      timestamp: new Date().toISOString()
+    };
+    const encodedGrades = gradesHash || JSON.stringify(payload);
     const result = await invokeChaincode('LockExamGrades', [
       requestId,
-      examOfficerId || 'ExamController-01',
-      gradesHash || 'GRADES_SHA256_' + Date.now(),
-      comments || 'Grades verified against registry and locked'
+      examOfficerId || 'ExamController-Org2',
+      encodedGrades,
+      comments || `Examination transcripts verified & locked: ${payload.honors}`
     ], 2); // Executed by Org 2 (Exam Authority)
-    res.json({ success: true, result });
+    res.json({ success: true, result, grades: payload });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -330,7 +337,7 @@ app.post('/api/workflow/admin-finalize', async (req, res) => {
 // ==========================================
 app.post('/api/certificates/issue', async (req, res) => {
   try {
-    let { certId, requestId, studentId, certType, studentName, department } = req.body;
+    let { certId, requestId, studentId, certType, studentName, department, honors } = req.body;
     if (!certId || !studentId) {
       return res.status(400).json({ error: 'certId and studentId are required' });
     }
@@ -350,7 +357,7 @@ app.post('/api/certificates/issue', async (req, res) => {
     }
 
     // Auto-resolve from request object if still needed
-    if (requestId && (!studentName || !department || !certType)) {
+    if (requestId) {
       try {
         const reqRaw = await queryChaincode('GetCertificateRequest', [requestId]);
         if (reqRaw) {
@@ -358,6 +365,12 @@ app.post('/api/certificates/issue', async (req, res) => {
           if (!studentName && reqObj.details?.studentName) studentName = reqObj.details.studentName;
           if (!department && reqObj.details?.department) department = reqObj.details.department;
           if (!certType && reqObj.certType) certType = reqObj.certType;
+          if (!honors && reqObj.gradesHash) {
+            try {
+              const g = JSON.parse(reqObj.gradesHash);
+              if (g.honors) honors = g.honors;
+            } catch (e) {}
+          }
         }
       } catch (err) {
         console.warn(`Could not resolve request data for ${requestId}:`, err.message);
@@ -375,6 +388,7 @@ app.post('/api/certificates/issue', async (req, res) => {
       studentName: studentName || 'Academic Student',
       department: department || 'Computer Science & Engineering',
       certType: certType || 'Bachelor of Technology',
+      honors: honors || 'WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION',
       issueDate,
       createdAt
     });
@@ -433,6 +447,21 @@ app.get('/api/certificates/:id/pdf', async (req, res) => {
           const student = typeof studentRaw === 'string' ? JSON.parse(studentRaw) : studentRaw;
           if (student.name) certObj.studentName = student.name;
           if (student.department) certObj.department = student.department;
+        }
+      } catch (e) {}
+    }
+
+    if (!certObj.honors && certObj.requestId) {
+      try {
+        const reqRaw = await queryChaincode('GetCertificateRequest', [certObj.requestId]);
+        if (reqRaw) {
+          const reqObj = typeof reqRaw === 'string' ? JSON.parse(reqRaw) : reqRaw;
+          if (reqObj.gradesHash) {
+            try {
+              const g = JSON.parse(reqObj.gradesHash);
+              if (g.honors) certObj.honors = g.honors;
+            } catch (e) {}
+          }
         }
       } catch (e) {}
     }

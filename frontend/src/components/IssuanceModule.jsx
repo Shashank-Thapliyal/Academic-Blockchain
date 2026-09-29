@@ -9,12 +9,21 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
   const [loading, setLoading] = useState(false);
   const [issuedData, setIssuedData] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
+  const [honors, setHonors] = useState("WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION");
 
   const { showSuccess, showError, showWarning, showInfo } = useToast();
 
   React.useEffect(() => {
     if (currentRequest?.status === 'ADMIN_FINALIZED') {
       setCertId(`CERT-${currentRequest.requestId.replace('REQ-', '')}`);
+      if (currentRequest.gradesHash) {
+        try {
+          const parsed = JSON.parse(currentRequest.gradesHash);
+          if (parsed.honors) setHonors(parsed.honors);
+        } catch (e) {
+          setHonors("WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION");
+        }
+      }
     }
   }, [currentRequest]);
 
@@ -45,7 +54,8 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
           studentId: currentRequest.studentId,
           certType: currentRequest.certType,
           studentName: currentRequest.details?.studentName || currentRequest.studentName || undefined,
-          department: currentRequest.details?.department || currentRequest.department || undefined
+          department: currentRequest.details?.department || currentRequest.department || undefined,
+          honors: honors.trim() || undefined
         })
       });
       const data = await res.json();
@@ -99,6 +109,19 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
             />
+          </div>
+          <div className="form-group" style={{ marginTop: "0.75rem" }}>
+            <label htmlFor="issueHonors">Conferment Honors / Division (from Exam Board):</label>
+            <input 
+              type="text" 
+              id="issueHonors" 
+              placeholder="e.g. WITH FIRST CLASS HONORS & ACADEMIC DISTINCTION"
+              value={honors}
+              onChange={(e) => setHonors(e.target.value)}
+            />
+            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginTop: "0.2rem" }}>
+              Decided by Org 2 Examination Board. Printed prominently under the degree title on the certificate.
+            </span>
           </div>
           <button 
             type="button" 
