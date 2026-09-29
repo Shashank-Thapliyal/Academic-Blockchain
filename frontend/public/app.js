@@ -12,6 +12,7 @@ const STAGES = [
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initTabs();
   initNetworkHealth();
   initStudentRegistration();
@@ -19,9 +20,40 @@ document.addEventListener('DOMContentLoaded', () => {
   initVerification();
   initRevocation();
   initLedgerExplorer();
+  initLedgerHistory();
+  initLiveEventStream();
 
   setInterval(initNetworkHealth, 10000);
 });
+
+// ==========================================
+// Theme Engine (Light / Dark)
+// ==========================================
+function initTheme() {
+  const toggleBtn = document.getElementById('themeToggleBtn');
+  const toggleIcon = document.getElementById('themeToggleIcon');
+
+  const savedTheme = localStorage.getItem('academic_theme') || 
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+
+  applyTheme(savedTheme);
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      localStorage.setItem('academic_theme', next);
+    });
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (toggleIcon) {
+      toggleIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+  }
+}
 
 // ==========================================
 // Tabs Navigation
@@ -32,10 +64,14 @@ function initTabs() {
 
   buttons.forEach(btn => {
     btn.addEventListener('click', () => {
-      buttons.forEach(b => b.classList.remove('active'));
+      buttons.forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
       contents.forEach(c => c.classList.remove('active'));
 
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
       const target = document.getElementById(btn.dataset.tab);
       if (target) target.classList.add('active');
 
@@ -238,7 +274,6 @@ function renderStepper(currentStatus) {
     }
   });
 
-  // Step lines
   const lines = document.querySelectorAll('.step-line');
   lines.forEach((line, idx) => {
     if (idx < currentIndex) {
@@ -350,7 +385,7 @@ function renderHistory(history) {
   list.innerHTML = history.map(h => `
     <li>
       <span><strong>${h.stage}</strong> by <code>${h.updatedBy || 'N/A'}</code></span>
-      <span style="color:#94a3b8;">${h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : ''} - ${h.comments || ''}</span>
+      <span style="color:var(--text-muted);">${h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : ''} - ${h.comments || ''}</span>
     </li>
   `).join('');
 }
@@ -394,7 +429,7 @@ async function executeCertificateIssuance() {
           <p><strong>Certificate ID:</strong> <code>${data.certId}</code></p>
           <p><strong>IPFS Content ID (CID):</strong> <code>${data.ipfsCid}</code></p>
           <p><strong>SHA-256 Digest:</strong> <code style="word-break:break-all;">${data.sha256Hash}</code></p>
-          <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+          <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
             <a href="${API_BASE}/certificates/${data.certId}/pdf" target="_blank" class="btn-primary" style="text-decoration:none; display:inline-block;">📄 View Generated PDF</a>
             <a href="http://localhost:8080/ipfs/${data.ipfsCid}" target="_blank" class="btn-secondary" style="text-decoration:none; display:inline-block;">🌐 View on IPFS Gateway</a>
           </div>
@@ -493,7 +528,7 @@ function renderVerificationBadge(data, computedHash) {
       <p><strong>Cert ID:</strong> <code>${c.certId}</code> | <strong>Issue Date:</strong> ${c.issueDate}</p>
       <p><strong>IPFS CID:</strong> <code>${c.ipfsHash}</code></p>
       <p><strong>Fabric Anchor MSP:</strong> <code>${c.issuerMSP || 'Org3MSP'}</code></p>
-      ${computedHash ? `<p style="font-size:0.8rem; color:#94a3b8;">Uploaded File SHA-256: <code>${computedHash}</code></p>` : ''}
+      ${computedHash ? `<p style="font-size:0.8rem; color:var(--text-muted);">Uploaded File SHA-256: <code>${computedHash}</code></p>` : ''}
     `;
   } else if (status === 'REVOKED') {
     const c = data.certificate || {};
@@ -578,8 +613,8 @@ async function loadCertificates() {
         <td>${c.studentId}</td>
         <td>${c.certType}</td>
         <td><span class="step-tag" style="background:${c.status === 'ISSUED' ? '#065f46' : '#991b1b'}; padding:2px 6px; border-radius:4px;">${c.status}</span></td>
-        <td><a href="http://localhost:8080/ipfs/${c.ipfsHash}" target="_blank" style="color:#38bdf8;">${c.ipfsHash?.substring(0, 10)}...</a></td>
-        <td style="font-family:monospace; font-size:0.75rem;">${c.docHash?.substring(0, 16)}...</td>
+        <td><a href="http://localhost:8080/ipfs/${c.ipfsHash}" target="_blank" style="color:var(--primary);">${c.ipfsHash ? c.ipfsHash.substring(0, 10) + '...' : 'N/A'}</a></td>
+        <td style="font-family:monospace; font-size:0.75rem;">${c.docHash ? c.docHash.substring(0, 16) + '...' : 'N/A'}</td>
         <td>
           <a href="${API_BASE}/certificates/${c.certId}/pdf" target="_blank" class="btn-secondary btn-sm" style="text-decoration:none;">PDF</a>
         </td>
@@ -587,5 +622,153 @@ async function loadCertificates() {
     `).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-hint">Error: ${err.message}</td></tr>`;
+  }
+}
+
+// ==========================================
+// Ledger State History (GetHistoryForKey)
+// ==========================================
+function initLedgerHistory() {
+  const queryBtn = document.getElementById('queryHistoryBtn');
+  const input = document.getElementById('historyKeyInput');
+
+  if (queryBtn && input) {
+    queryBtn.addEventListener('click', () => {
+      const key = input.value.trim();
+      if (!key) {
+        alert('Please enter a Certificate ID or Request ID to inspect.');
+        return;
+      }
+      queryKeyHistory(key);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        queryBtn.click();
+      }
+    });
+  }
+}
+
+async function queryKeyHistory(key) {
+  const container = document.getElementById('historyTimelineDisplay');
+  if (!container) return;
+
+  container.innerHTML = '<p class="placeholder-text">⏳ Traversing ledger historical blocks for key: <code>' + key + '</code>...</p>';
+
+  try {
+    const res = await fetch(`${API_BASE}/history/${encodeURIComponent(key)}`);
+    const data = await res.json();
+
+    if (!res.ok || !data.history || data.history.length === 0) {
+      container.innerHTML = `<p class="placeholder-text">No ledger historical records found for key <code>${key}</code>.</p>`;
+      return;
+    }
+
+    const itemsHtml = data.history.map((record, index) => {
+      const isDelete = record.isDelete;
+      const txId = record.txId || 'N/A';
+      const timestamp = record.timestamp ? new Date(record.timestamp).toLocaleString() : 'N/A';
+      let valueStr = '';
+      try {
+        valueStr = typeof record.value === 'object' ? JSON.stringify(record.value, null, 2) : String(record.value || '');
+      } catch (e) {
+        valueStr = String(record.value || '');
+      }
+
+      return `
+        <div class="timeline-item" style="display: flex; gap: 1rem; margin-bottom: 1.25rem; border-left: 2px solid var(--primary); padding-left: 1rem; position: relative;">
+          <div style="position: absolute; left: -7px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: ${isDelete ? 'var(--danger)' : 'var(--primary)'};"></div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <span style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">
+                #${index + 1} • Tx: <code style="font-size: 0.75rem;">${txId.substring(0, 16)}...</code>
+              </span>
+              <span style="font-size: var(--text-xs); color: var(--text-muted);">${timestamp}</span>
+            </div>
+            ${isDelete ? '<span class="step-tag" style="background: rgba(239,68,68,0.2); color: #f87171;">DELETED</span>' : ''}
+            <pre style="background: var(--bg-card-subtle); padding: 0.5rem; border-radius: var(--radius-sm); font-size: 0.72rem; overflow-x: auto; max-height: 120px; color: var(--text-secondary); margin-top: 0.25rem;">${valueStr}</pre>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = `<div class="timeline-feed">${itemsHtml}</div>`;
+  } catch (err) {
+    container.innerHTML = `<p class="placeholder-text" style="color: var(--danger);">Error querying history: ${err.message}</p>`;
+  }
+}
+
+// ==========================================
+// Real-Time Event Ticker (Server-Sent Events)
+// ==========================================
+function initLiveEventStream() {
+  const feed = document.getElementById('eventTickerList');
+  const clearBtn = document.getElementById('clearEventsBtn');
+  const statusBadge = document.getElementById('sseStatusBadge');
+  const dot = document.getElementById('sseDot');
+
+  if (clearBtn && feed) {
+    clearBtn.addEventListener('click', () => {
+      feed.innerHTML = '<li class="empty-hint">Waiting for live ledger activity...</li>';
+    });
+  }
+
+  try {
+    const eventSource = new EventSource(`${API_BASE}/events`);
+
+    eventSource.addEventListener('ready', () => {
+      if (statusBadge) statusBadge.textContent = 'SSE Active';
+      if (dot) dot.className = 'status-dot online';
+    });
+
+    eventSource.addEventListener('ledger', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        appendLiveEvent(payload);
+      } catch (err) {
+        console.warn('Failed to parse SSE ledger event:', err);
+      }
+    });
+
+    eventSource.onerror = () => {
+      if (statusBadge) statusBadge.textContent = 'Reconnecting...';
+      if (dot) dot.className = 'status-dot offline';
+    };
+  } catch (err) {
+    console.warn('SSE not supported or failed to initiate:', err);
+  }
+}
+
+function appendLiveEvent(event) {
+  const feed = document.getElementById('eventTickerList');
+  if (!feed) return;
+
+  const emptyHint = feed.querySelector('.empty-hint');
+  if (emptyHint) emptyHint.remove();
+
+  const li = document.createElement('li');
+  li.style.cssText = 'padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; background: var(--bg-card-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--primary); display: flex; flex-direction: column; gap: 0.2rem;';
+
+  const timeStr = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+  const nameStr = event.eventName || event.type || 'LedgerEvent';
+  const txStr = event.txId ? event.txId.substring(0, 12) + '...' : 'Consensus';
+
+  li.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-weight: 600; color: var(--primary); font-size: var(--text-sm);">⚡ ${nameStr}</span>
+      <span style="font-size: var(--text-xs); color: var(--text-muted);">${timeStr}</span>
+    </div>
+    <div style="font-size: var(--text-xs); color: var(--text-secondary);">
+      <span>Tx: <code>${txStr}</code></span>
+      ${event.payload ? `<div style="font-family: monospace; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${typeof event.payload === 'object' ? JSON.stringify(event.payload) : event.payload}</div>` : ''}
+    </div>
+  `;
+
+  feed.prepend(li);
+
+  while (feed.children.length > 50) {
+    feed.lastElementChild.remove();
   }
 }

@@ -1,95 +1,97 @@
 import React, { useState } from 'react';
-import { useNetwork } from '../context/NetworkContext';
-import { ShieldAlert, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 
-export default function RevocationModule({ onRevoked }) {
-  const { API_BASE } = useNetwork();
-  const [form, setForm] = useState({
-    certId: '',
-    reason: '',
-    revokedBy: 'Dean / Controller of Academic Integrity'
-  });
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
+
+export default function RevocationModule() {
+  const [certId, setCertId] = useState('');
+  const [reason, setReason] = useState('');
+  const [officer, setOfficer] = useState('Dean / Controller of Academic Integrity');
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState(null);
+  const [message, setMessage] = useState(null);
 
   const handleRevoke = async (e) => {
     e.preventDefault();
-    if (!window.confirm(`Are you sure you want to permanently revoke certificate ${form.certId} on the blockchain?`)) {
+    if (!certId || !reason) {
+      alert('Please fill out Certificate ID and Revocation Reason.');
+      return;
+    }
+
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to permanently revoke certificate ${certId} on the immutable Fabric ledger? This operation cannot be undone.`)) {
       return;
     }
 
     setLoading(true);
-    setFeedback(null);
+    setMessage(null);
+
     try {
       const res = await fetch(`${API_BASE}/certificates/revoke`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          certId,
+          reason,
+          revokedBy: officer
+        })
       });
       const data = await res.json();
       if (res.ok) {
-        setFeedback({ type: 'success', message: `⚠️ Certificate ${form.certId} has been successfully REVOKED on Hyperledger Fabric!` });
-        setForm({ certId: '', reason: '', revokedBy: 'Dean / Controller of Academic Integrity' });
-        if (onRevoked) onRevoked();
+        setMessage({ type: 'success', text: `Certificate ${certId} successfully REVOKED on Hyperledger Fabric ledger!` });
+        setCertId('');
+        setReason('');
       } else {
-        setFeedback({ type: 'error', message: `Revocation failed: ${data.error}` });
+        setMessage({ type: 'error', text: data.error || 'Revocation failed' });
       }
     } catch (err) {
-      setFeedback({ type: 'error', message: `Network error: ${err.message}` });
+      setMessage({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="card" style={{ maxWidth: '700px', margin: '0 auto' }}>
+    <div className="card" style={{ maxWidth: '750px', margin: '0 auto' }}>
       <div className="card-title">
-        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShieldAlert size={20} color="#ef4444" />
+        <h3 style={{ color: 'var(--danger)' }}>
+          <ShieldAlert size={20} />
           Revoke Academic Certificate
         </h3>
-        <span className="step-num" style={{ borderColor: '#ef4444', color: '#f87171' }}>Admin / Org 3</span>
+        <span className="step-num" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)' }}>
+          Admin / Org 3
+        </span>
       </div>
       <p className="subtitle">
-        Revoke a fraudulent, withdrawn, or administratively canceled certificate on the immutable Fabric ledger.
+        Revoke an academic credential for disciplinary breach, clerical withdrawal, or fraudulent claim. Revocation state is recorded permanently on the immutable blockchain ledger.
       </p>
 
-      {feedback && (
-        <div style={{
-          padding: '0.75rem',
-          marginBottom: '1rem',
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-          background: feedback.type === 'success' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)',
-          color: feedback.type === 'success' ? '#f87171' : '#fbbf24',
-          border: `1px solid ${feedback.type === 'success' ? '#ef4444' : '#f59e0b'}`
-        }}>
-          {feedback.message}
+      {message && (
+        <div className={`result-banner status-${message.type === 'success' ? 'verified' : 'invalid'}`} style={{ padding: '0.75rem', marginBottom: '1rem' }}>
+          <p style={{ margin: 0, fontWeight: 600 }}>{message.text}</p>
         </div>
       )}
 
-      <form onSubmit={handleRevoke}>
+      <form id="revokeForm" onSubmit={handleRevoke}>
         <div className="form-group">
           <label htmlFor="revokeCertId">Certificate ID to Revoke:</label>
           <input 
             type="text" 
-            id="revokeCertId"
+            id="revokeCertId" 
             required 
             placeholder="e.g. CERT-2024-001"
-            value={form.certId}
-            onChange={(e) => setForm({ ...form, certId: e.target.value })}
+            value={certId}
+            onChange={(e) => setCertId(e.target.value)}
           />
         </div>
 
         <div className="form-group">
-          <label htmlFor="revokeReason">Revocation Reason:</label>
+          <label htmlFor="revokeReason">Official Revocation Reason:</label>
           <textarea 
-            id="revokeReason"
+            id="revokeReason" 
             rows="3" 
             required 
-            placeholder="State official audit or disciplinary reason..."
-            value={form.reason}
-            onChange={(e) => setForm({ ...form, reason: e.target.value })}
+            placeholder="State official audit, committee resolution, or disciplinary rationale..."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
           />
         </div>
 
@@ -97,15 +99,18 @@ export default function RevocationModule({ onRevoked }) {
           <label htmlFor="revokeOfficer">Revoking Authority:</label>
           <input 
             type="text" 
-            id="revokeOfficer"
-            value={form.revokedBy}
-            onChange={(e) => setForm({ ...form, revokedBy: e.target.value })}
+            id="revokeOfficer" 
+            value={officer}
+            onChange={(e) => setOfficer(e.target.value)}
           />
         </div>
 
-        <button type="submit" className="btn-danger full-width" disabled={loading}>
-          <AlertTriangle size={16} />
-          {loading ? 'Executing on Fabric...' : 'Execute Immutable Revocation'}
+        <button 
+          type="submit" 
+          className="btn-danger full-width"
+          disabled={loading}
+        >
+          {loading ? 'Executing Revocation on Ledger...' : '⚠️ Execute Immutable Revocation on Blockchain'}
         </button>
       </form>
     </div>

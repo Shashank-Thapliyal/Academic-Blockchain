@@ -1,19 +1,16 @@
 'use strict';
 
-const API_BASE = 'http://localhost:4000/api';
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 let html5QrCode = null;
 let isScanning = false;
 let selectedPdfFile = null;
 
-// ==========================================
-// Initialization on DOM Load
-// ==========================================
 document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
   setupEventListeners();
   checkNetwork();
   setInterval(checkNetwork, 10000);
 
-  // Check URL query params for auto-verification (e.g. ?certId=CERT-2024-001 or ?hash=...)
   const urlParams = new URLSearchParams(window.location.search);
   const certIdParam = urlParams.get('certId') || urlParams.get('id');
   const hashParam = urlParams.get('hash');
@@ -27,9 +24,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ==========================================
-// Network Health
-// ==========================================
+function initTheme() {
+  const toggleBtn = document.getElementById('themeToggleBtn');
+  const toggleIcon = document.getElementById('themeToggleIcon');
+
+  const savedTheme = localStorage.getItem('academic_theme') || 
+    (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+
+  applyTheme(savedTheme);
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      localStorage.setItem('academic_theme', next);
+    });
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (toggleIcon) {
+      toggleIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+  }
+}
+
 async function checkNetwork() {
   const badge = document.getElementById('netStatusBadge');
   const text = document.getElementById('networkStatusText');
@@ -42,9 +62,7 @@ async function checkNetwork() {
     
     if (data.status === 'UP') {
       text.textContent = 'Consortium Online (Org1, Org2, Org3)';
-      if (dot) {
-        dot.className = 'status-dot online';
-      }
+      if (dot) dot.className = 'status-dot online';
     } else {
       text.textContent = 'Consortium Partial';
       if (dot) {
@@ -54,23 +72,16 @@ async function checkNetwork() {
     }
   } catch (err) {
     text.textContent = 'Ledger Disconnected';
-    if (dot) {
-      dot.className = 'status-dot offline';
-    }
+    if (dot) dot.className = 'status-dot offline';
   }
 }
 
-// ==========================================
-// Event Listeners & UI Binding
-// ==========================================
 function setupEventListeners() {
-  // 1. Camera QR Scanner controls
   const startBtn = document.getElementById('startCameraBtn');
   const stopBtn = document.getElementById('stopCameraBtn');
   if (startBtn) startBtn.addEventListener('click', startCameraScanner);
   if (stopBtn) stopBtn.addEventListener('click', stopCameraScanner);
 
-  // 2. QR Image File Dropzone
   const qrDropzone = document.getElementById('qrDropzone');
   const qrFileInput = document.getElementById('qrFileInput');
   if (qrDropzone && qrFileInput) {
@@ -85,13 +96,10 @@ function setupEventListeners() {
     qrDropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       qrDropzone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        handleQrFile(e.dataTransfer.files[0]);
-      }
+      if (e.dataTransfer.files.length > 0) handleQrFile(e.dataTransfer.files[0]);
     });
   }
 
-  // 3. PDF File Dropzone
   const pdfDropzone = document.getElementById('pdfDropzone');
   const pdfFileInput = document.getElementById('pdfFileInput');
   const verifyPdfBtn = document.getElementById('verifyPdfBtn');
@@ -108,9 +116,7 @@ function setupEventListeners() {
     pdfDropzone.addEventListener('drop', (e) => {
       e.preventDefault();
       pdfDropzone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        setPdfFile(e.dataTransfer.files[0]);
-      }
+      if (e.dataTransfer.files.length > 0) setPdfFile(e.dataTransfer.files[0]);
     });
   }
 
@@ -118,7 +124,6 @@ function setupEventListeners() {
     verifyPdfBtn.addEventListener('click', verifySelectedPdf);
   }
 
-  // 4. Manual Search Form
   const manualForm = document.getElementById('manualLookupForm');
   if (manualForm) {
     manualForm.addEventListener('submit', async (e) => {
@@ -133,7 +138,6 @@ function setupEventListeners() {
     });
   }
 
-  // Sample Chips
   document.querySelectorAll('.sample-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       const sample = btn.getAttribute('data-sample');
@@ -142,16 +146,12 @@ function setupEventListeners() {
     });
   });
 
-  // Print Report Button
   const printBtn = document.getElementById('printReportBtn');
   if (printBtn) {
     printBtn.addEventListener('click', () => window.print());
   }
 }
 
-// ==========================================
-// Camera QR Scanner (Html5Qrcode)
-// ==========================================
 async function startCameraScanner() {
   if (typeof Html5Qrcode === 'undefined') {
     alert('QR scanning library is loading. Please check internet access or try uploading the QR image.');
@@ -174,21 +174,14 @@ async function startCameraScanner() {
 
     await html5QrCode.start(
       { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 }
-      },
-      (decodedText, decodedResult) => {
-        console.log('QR Code scanned:', decodedText);
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
         stopCameraScanner();
         handleDecodedQrText(decodedText);
       },
-      (errorMessage) => {
-        // frame parse error, ignore
-      }
+      () => {}
     );
   } catch (err) {
-    console.error('Error starting camera:', err);
     alert(`Could not start camera: ${err.message || err}. You can also upload a QR image.`);
     stopCameraScanner();
   }
@@ -203,7 +196,7 @@ async function stopCameraScanner() {
     try {
       await html5QrCode.stop();
     } catch (e) {
-      console.warn('Error stopping scanner:', e);
+      console.warn(e);
     }
     isScanning = false;
   }
@@ -213,9 +206,6 @@ async function stopCameraScanner() {
   if (stopBtn) stopBtn.style.display = 'none';
 }
 
-// ==========================================
-// QR Image File Decoder
-// ==========================================
 async function handleQrFileSelect(e) {
   if (e.target.files && e.target.files.length > 0) {
     await handleQrFile(e.target.files[0]);
@@ -232,44 +222,36 @@ async function handleQrFile(file) {
   try {
     const scanner = new Html5Qrcode('qrReader');
     const decodedText = await scanner.scanFile(file, true);
-    console.log('Decoded QR from file:', decodedText);
     handleDecodedQrText(decodedText);
   } catch (err) {
-    console.error('QR decode failed:', err);
-    alert('No clear QR code could be found in the uploaded image. Please try another image or enter the Certificate ID.');
+    alert('No clear QR code could be found in the uploaded image.');
   }
 }
 
 function handleDecodedQrText(text) {
   try {
-    // Check if it's a verification URL
     if (text.startsWith('http://') || text.startsWith('https://')) {
       const url = new URL(text);
       const certId = url.searchParams.get('certId') || url.searchParams.get('id');
       const hash = url.searchParams.get('hash');
       if (certId) {
         document.getElementById('manualInput').value = certId;
-        verifyById(certId);
-        return;
+        return verifyById(certId);
       }
       if (hash) {
         document.getElementById('manualInput').value = hash;
-        verifyByHash(hash);
-        return;
+        return verifyByHash(hash);
       }
     }
 
-    // If it's a plain string or JSON
     if (text.startsWith('{')) {
       const parsed = JSON.parse(text);
       if (parsed.certId) {
         document.getElementById('manualInput').value = parsed.certId;
-        verifyById(parsed.certId);
-        return;
+        return verifyById(parsed.certId);
       }
     }
 
-    // Default assume certId or hash
     document.getElementById('manualInput').value = text;
     if (text.length === 64 && /^[0-9a-fA-F]+$/.test(text)) {
       verifyByHash(text);
@@ -282,9 +264,6 @@ function handleDecodedQrText(text) {
   }
 }
 
-// ==========================================
-// PDF File Tamper Check & SHA-256
-// ==========================================
 function handlePdfFileSelect(e) {
   if (e.target.files && e.target.files.length > 0) {
     setPdfFile(e.target.files[0]);
@@ -309,18 +288,13 @@ async function verifySelectedPdf() {
   btn.textContent = 'Computing SHA-256 & Querying Blockchain...';
 
   try {
-    // 1. Calculate SHA-256 in browser
     const arrayBuffer = await selectedPdfFile.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    console.log(`Computed SHA-256 for ${selectedPdfFile.name}:`, calculatedHash);
-
-    // 2. Query ledger by calculated hash
     await verifyByHash(calculatedHash, selectedPdfFile.name);
   } catch (err) {
-    console.error('PDF verification error:', err);
     alert(`Verification error: ${err.message}`);
   } finally {
     btn.disabled = false;
@@ -328,9 +302,6 @@ async function verifySelectedPdf() {
   }
 }
 
-// ==========================================
-// Blockchain Ledger Verification Queries
-// ==========================================
 async function verifyById(certId) {
   showLoadingState();
   try {
@@ -353,9 +324,6 @@ async function verifyByHash(hash, originalFileName) {
   }
 }
 
-// ==========================================
-// UI Rendering
-// ==========================================
 function showLoadingState() {
   const section = document.getElementById('verificationResultSection');
   section.style.display = 'block';
@@ -386,7 +354,6 @@ function renderVerificationResult(data, queriedId, queriedHash, fileName) {
   const cert = data.certificate || {};
 
   if (data.verificationStatus === 'VERIFIED') {
-    // 1. VERIFIED
     banner.className = 'result-banner status-verified';
     bannerIcon.textContent = '✅';
     bannerTitle.textContent = 'OFFICIAL CREDENTIAL VERIFIED & AUTHENTIC';
@@ -397,7 +364,6 @@ function renderVerificationResult(data, queriedId, queriedHash, fileName) {
     revocationBox.style.display = 'none';
     populateCertificateData(cert, 'ISSUED / ACTIVE', 'verified');
   } else if (data.verificationStatus === 'REVOKED') {
-    // 2. REVOKED
     banner.className = 'result-banner status-revoked';
     bannerIcon.textContent = '⚠️';
     bannerTitle.textContent = 'CREDENTIAL REVOKED BY INSTITUTION';
@@ -411,7 +377,6 @@ function renderVerificationResult(data, queriedId, queriedHash, fileName) {
     }
     populateCertificateData(cert, 'REVOKED', 'revoked');
   } else {
-    // 3. INVALID
     banner.className = 'result-banner status-invalid';
     bannerIcon.textContent = '❌';
     bannerTitle.textContent = 'CREDENTIAL INVALID OR NOT FOUND';
@@ -447,7 +412,6 @@ function populateCertificateData(cert, statusText, statusClass) {
   document.getElementById('resDocHash').textContent = cert.docHash || '—';
   document.getElementById('resIpfsCid').textContent = cert.ipfsHash || '—';
 
-  // Update Action Links
   const viewPdfLink = document.getElementById('viewPdfLink');
   const viewIpfsLink = document.getElementById('viewIpfsLink');
 

@@ -1,69 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNetwork } from '../context/NetworkContext';
-import { Html5Qrcode } from 'html5-qrcode';
-import { 
-  QrCode, 
-  FileCheck2, 
-  Search, 
-  Camera, 
-  Upload, 
-  FileText, 
-  CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
-  Printer, 
-  Globe, 
-  ShieldCheck, 
-  ArrowRight,
-  Sparkles,
-  Lock,
-  Building,
-  GraduationCap
-} from 'lucide-react';
+import { Camera, FileText, Search, CheckCircle2, AlertTriangle, XCircle, Printer, Download, Globe, Shield } from 'lucide-react';
 
-export default function EmployerPortal({ initialCertId }) {
-  const { API_BASE } = useNetwork();
-  const [activeTab, setActiveTab] = useState('qr'); // 'qr' | 'pdf' | 'search'
-  const [manualInput, setManualInput] = useState(initialCertId || '');
-  const [scanning, setScanning] = useState(false);
-  const [selectedPdf, setSelectedPdf] = useState(null);
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
+
+export default function EmployerPortal({ isStandalone = false }) {
+  const [activeOption, setActiveOption] = useState('qr');
+  const [manualInput, setManualInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-
+  const [selectedPdf, setSelectedPdf] = useState(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const qrScannerRef = useRef(null);
-  const qrFileInputRef = useRef(null);
-  const pdfFileInputRef = useRef(null);
 
-  // Deep-link check on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const certId = params.get('certId') || params.get('id') || initialCertId;
+    const id = params.get('certId') || params.get('id');
     const hash = params.get('hash');
-    if (certId) {
-      setManualInput(certId);
-      setActiveTab('search');
-      verifyById(certId);
+    if (id) {
+      setManualInput(id);
+      verifyById(id);
     } else if (hash) {
       setManualInput(hash);
-      setActiveTab('search');
       verifyByHash(hash);
     }
-  }, [initialCertId]);
-
-  useEffect(() => {
-    return () => {
-      stopCameraScanner();
-    };
   }, []);
 
   const verifyById = async (id) => {
-    if (!id) return;
     setLoading(true);
-    setResult(null);
     try {
       const res = await fetch(`${API_BASE}/verify/id/${encodeURIComponent(id)}`);
       const data = await res.json();
-      setResult({ ...data, queryType: 'id', queryValue: id });
+      setResult(data);
     } catch (err) {
       setResult({ verificationStatus: 'ERROR', message: err.message });
     } finally {
@@ -72,13 +39,11 @@ export default function EmployerPortal({ initialCertId }) {
   };
 
   const verifyByHash = async (hash, fileName) => {
-    if (!hash) return;
     setLoading(true);
-    setResult(null);
     try {
       const res = await fetch(`${API_BASE}/verify/hash/${encodeURIComponent(hash)}`);
       const data = await res.json();
-      setResult({ ...data, queryType: 'hash', queryValue: hash, fileName });
+      setResult({ ...data, uploadedFileName: fileName });
     } catch (err) {
       setResult({ verificationStatus: 'ERROR', message: err.message });
     } finally {
@@ -86,417 +51,374 @@ export default function EmployerPortal({ initialCertId }) {
     }
   };
 
-  // Camera QR Scanner
-  const startCameraScanner = async () => {
+  const handlePdfUpload = async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Please upload a valid PDF document.');
+      return;
+    }
+    setSelectedPdf(file);
+    setLoading(true);
+
     try {
-      if (!qrScannerRef.current) {
-        qrScannerRef.current = new Html5Qrcode('qr-reader-container');
-      }
-      setScanning(true);
+      const arrayBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      await verifyByHash(calculatedHash, file.name);
+    } catch (err) {
+      alert(`Error computing SHA-256: ${err.message}`);
+      setLoading(false);
+    }
+  };
+
+  const startCamera = async () => {
+    if (typeof window.Html5Qrcode === 'undefined') {
+      alert('QR camera scanner library is still initializing. You can also upload a QR image.');
+      return;
+    }
+    try {
+      qrScannerRef.current = new window.Html5Qrcode('qrReader');
+      setIsCameraActive(true);
       await qrScannerRef.current.start(
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (decodedText) => {
-          stopCameraScanner();
-          handleDecodedQr(decodedText);
+          stopCamera();
+          handleQrDecoded(decodedText);
         },
         () => {}
       );
     } catch (err) {
-      alert(`Camera scanner error: ${err.message || err}`);
-      setScanning(false);
+      alert(`Camera access error: ${err.message}`);
+      setIsCameraActive(false);
     }
   };
 
-  const stopCameraScanner = async () => {
-    if (qrScannerRef.current && qrScannerRef.current.isScanning) {
+  const stopCamera = async () => {
+    if (qrScannerRef.current && isCameraActive) {
       try {
         await qrScannerRef.current.stop();
-      } catch (e) {}
-    }
-    setScanning(false);
-  };
-
-  const handleQrImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const scanner = new Html5Qrcode('qr-reader-container');
-      const decoded = await scanner.scanFile(file, true);
-      handleDecodedQr(decoded);
-    } catch (err) {
-      alert('Could not decode QR code from the uploaded image. Please try another image or enter the Certificate ID.');
+      } catch (e) {
+        console.warn(e);
+      }
+      setIsCameraActive(false);
     }
   };
 
-  const handleDecodedQr = (text) => {
+  const handleQrDecoded = (text) => {
     try {
       if (text.startsWith('http://') || text.startsWith('https://')) {
         const url = new URL(text);
         const certId = url.searchParams.get('certId') || url.searchParams.get('id');
         const hash = url.searchParams.get('hash');
-        if (certId) {
-          setManualInput(certId);
-          setActiveTab('search');
-          verifyById(certId);
-          return;
-        }
-        if (hash) {
-          setManualInput(hash);
-          setActiveTab('search');
-          verifyByHash(hash);
-          return;
-        }
+        if (certId) return verifyById(certId);
+        if (hash) return verifyByHash(hash);
       }
-
+      if (text.startsWith('{')) {
+        const parsed = JSON.parse(text);
+        if (parsed.certId) return verifyById(parsed.certId);
+      }
       if (text.length === 64 && /^[0-9a-fA-F]+$/.test(text)) {
-        setManualInput(text);
-        setActiveTab('search');
         verifyByHash(text);
       } else {
-        setManualInput(text);
-        setActiveTab('search');
         verifyById(text);
       }
     } catch (e) {
-      setManualInput(text);
-      setActiveTab('search');
       verifyById(text);
     }
   };
 
-  const handlePdfUpload = async () => {
-    if (!selectedPdf) return;
-    setLoading(true);
-    try {
-      const buffer = await selectedPdf.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      await verifyByHash(hashHex, selectedPdf.name);
-    } catch (err) {
-      alert(`PDF Hashing error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const cert = result?.certificate || {};
-  const isVerified = result?.verificationStatus === 'VERIFIED';
-  const isRevoked = result?.verificationStatus === 'REVOKED';
-  const isInvalid = result && !isVerified && !isRevoked;
+  const status = result?.verificationStatus || (result?.verified ? 'VERIFIED' : result ? 'INVALID' : '');
 
   return (
-    <div className="employer-container">
-      {/* Hero Header */}
-      <div className="verifier-hero">
-        <div className="verifier-pill">
-          <ShieldCheck size={16} className="pill-icon" />
-          <span>Hyperledger Fabric 2.5 • Official Public Verifier</span>
-        </div>
-        <h2 className="verifier-title">Verify Academic Credentials on Blockchain</h2>
-        <p className="verifier-desc">
-          Instant, tamper-evident degree verification backed by 3-Organization Multi-Party Consensus and Decentralized IPFS Storage.
-        </p>
-      </div>
+    <div className={isStandalone ? 'employer-standalone' : ''}>
+      {isStandalone && (
+        <section className="employer-hero">
+          <div className="hero-content">
+            <div className="trust-badge">
+              <Shield size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+              100% Cryptographically Verifiable & Tamper-Proof
+            </div>
+            <h2>Verify Academic Credentials Directly on Blockchain</h2>
+            <p>Zero-trust verification powered by 3-Organization Hyperledger Fabric consensus and decentralized IPFS cryptographic hashing.</p>
+          </div>
+        </section>
+      )}
 
-      {/* Modern Method Switcher */}
-      <div className="verifier-card-wrapper">
-        <div className="verifier-tabs">
-          <button 
-            type="button"
-            className={`verifier-tab-btn ${activeTab === 'qr' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('qr'); stopCameraScanner(); }}
-          >
-            <QrCode size={18} />
-            <span>Scan QR Code</span>
-          </button>
+      <div className="verify-methods-container">
+        {/* Option 1: QR Scanner */}
+        <div className={`verify-card ${activeOption === 'qr' ? 'active' : ''}`} id="cardQrScan" onClick={() => setActiveOption('qr')}>
+          <div className="verify-card-header">
+            <span className="card-icon">📷</span>
+            <div>
+              <h3>Scan Verifiable QR Code</h3>
+              <p>Scan the cryptographic QR code on candidate's certificate with webcam or upload an image</p>
+            </div>
+          </div>
 
-          <button 
-            type="button"
-            className={`verifier-tab-btn ${activeTab === 'pdf' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('pdf'); stopCameraScanner(); }}
-          >
-            <FileCheck2 size={18} />
-            <span>Upload PDF</span>
-          </button>
-
-          <button 
-            type="button"
-            className={`verifier-tab-btn ${activeTab === 'search' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('search'); stopCameraScanner(); }}
-          >
-            <Search size={18} />
-            <span>Search by ID / Hash</span>
-          </button>
-        </div>
-
-        {/* Tab 1: QR Code Scanner */}
-        {activeTab === 'qr' && (
-          <div className="verifier-body">
-            <div className="qr-viewport-box">
-              <div id="qr-reader-container" className="qr-scanner-live" style={{ display: scanning ? 'block' : 'none' }}></div>
-              
-              {!scanning ? (
-                <div className="camera-prompt">
-                  <div className="scanner-icon-circle">
-                    <Camera size={32} />
-                  </div>
-                  <h3>Scan Candidate Certificate QR</h3>
-                  <p>Point your laptop webcam or phone camera at the QR code on the certificate.</p>
-                  <button type="button" className="btn-primary" onClick={startCameraScanner}>
-                    <Camera size={18} /> Start Camera Scanner
-                  </button>
-                </div>
+          <div className="qr-scanner-wrapper">
+            <div id="qrReader" className="qr-reader-viewport" style={{ display: isCameraActive ? 'block' : 'none', minHeight: '250px' }} />
+            
+            <div className="qr-controls">
+              {!isCameraActive ? (
+                <button type="button" className="btn-primary full-width" id="startCameraBtn" onClick={startCamera}>
+                  <Camera size={16} /> 🎥 Start Camera Scanner
+                </button>
               ) : (
-                <div className="camera-active-controls">
-                  <span className="live-tag">● Camera Live</span>
-                  <button type="button" className="btn-secondary btn-sm" onClick={stopCameraScanner}>
-                    Stop Camera
-                  </button>
-                </div>
+                <button type="button" className="btn-secondary full-width" id="stopCameraBtn" onClick={stopCamera}>
+                  ⏹️ Stop Camera
+                </button>
               )}
             </div>
 
-            <div className="divider-line"><span>OR UPLOAD QR IMAGE</span></div>
+            <div className="or-divider"><span>OR UPLOAD QR IMAGE</span></div>
 
-            <div className="verifier-dropzone" onClick={() => qrFileInputRef.current?.click()}>
+            <div 
+              className="file-dropzone" 
+              id="qrDropzone"
+              onClick={() => document.getElementById('qrFileInput')?.click()}
+            >
               <input 
                 type="file" 
-                ref={qrFileInputRef} 
+                id="qrFileInput" 
                 accept="image/*" 
-                style={{ display: 'none' }}
-                onChange={handleQrImageUpload}
-              />
-              <Upload size={28} className="dropzone-svg" />
-              <p><strong>Click or Drag & Drop</strong> QR code image here</p>
-              <span className="drop-hint">Supports PNG, JPG, WebP screenshots & photos</span>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: PDF Upload */}
-        {activeTab === 'pdf' && (
-          <div className="verifier-body">
-            <div className="verifier-dropzone" onClick={() => pdfFileInputRef.current?.click()}>
-              <input 
-                type="file" 
-                ref={pdfFileInputRef} 
-                accept=".pdf" 
-                style={{ display: 'none' }}
-                onChange={(e) => setSelectedPdf(e.target.files?.[0] || null)}
-              />
-              <FileText size={36} className="dropzone-svg" />
-              <p><strong>Click or Drag & Drop</strong> candidate certificate PDF here</p>
-              <span className="drop-hint">Computes SHA-256 fingerprint in real-time to detect even a single modified byte</span>
-            </div>
-
-            {selectedPdf && (
-              <div className="selected-file-card">
-                <div className="file-info-row">
-                  <FileText size={20} color="#38bdf8" />
-                  <span className="file-name">{selectedPdf.name}</span>
-                  <span className="file-size">({(selectedPdf.size / 1024).toFixed(1)} KB)</span>
-                </div>
-                <button 
-                  type="button" 
-                  className="btn-primary full-width" 
-                  onClick={handlePdfUpload} 
-                  disabled={loading}
-                >
-                  <ShieldCheck size={18} />
-                  {loading ? 'Computing SHA-256 & Querying Fabric...' : 'Verify PDF Hash on Blockchain'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab 3: Search by ID or Hash */}
-        {activeTab === 'search' && (
-          <div className="verifier-body">
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (manualInput.length === 64 && /^[0-9a-fA-F]+$/.test(manualInput)) {
-                verifyByHash(manualInput);
-              } else {
-                verifyById(manualInput);
-              }
-            }}>
-              <div className="search-input-group">
-                <Search size={20} className="search-icon" />
-                <input 
-                  type="text" 
-                  placeholder="Enter Certificate ID (e.g. CERT-2024-001) or SHA-256 Hash..."
-                  value={manualInput}
-                  onChange={(e) => setManualInput(e.target.value)}
-                  required
-                />
-                <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Searching...' : 'Verify on Ledger'}
-                </button>
-              </div>
-            </form>
-
-            <div className="sample-chips-row">
-              <span className="chips-label">Sample IDs:</span>
-              <button 
-                type="button" 
-                className="chip-btn"
-                onClick={() => {
-                  setManualInput('CERT-2024-001');
-                  verifyById('CERT-2024-001');
+                className="file-input-hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) {
+                    const reader = new window.Html5Qrcode('qrReader');
+                    reader.scanFile(e.target.files[0], true)
+                      .then(handleQrDecoded)
+                      .catch(() => alert('No readable QR code found in this image.'));
+                  }
                 }}
-              >
-                CERT-2024-001
-              </button>
+              />
+              <span className="dropzone-icon">🖼️</span>
+              <p><strong>Click or Drag & Drop</strong> QR image</p>
+              <span className="dropzone-hint">PNG, JPG, WebP supported</span>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Option 2: PDF Upload */}
+        <div className={`verify-card ${activeOption === 'pdf' ? 'active' : ''}`} id="cardPdfUpload" onClick={() => setActiveOption('pdf')}>
+          <div className="verify-card-header">
+            <span className="card-icon">📄</span>
+            <div>
+              <h3>Upload Candidate PDF</h3>
+              <p>Calculates SHA-256 fingerprint in-browser to verify byte-for-byte integrity against Fabric ledger</p>
+            </div>
+          </div>
+
+          <div 
+            className="file-dropzone" 
+            id="pdfDropzone"
+            onClick={() => document.getElementById('pdfFileInput')?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (e.dataTransfer.files?.length) handlePdfUpload(e.dataTransfer.files[0]);
+            }}
+          >
+            <input 
+              type="file" 
+              id="pdfFileInput" 
+              accept=".pdf" 
+              className="file-input-hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) handlePdfUpload(e.target.files[0]);
+              }}
+            />
+            <span className="dropzone-icon">📁</span>
+            <p><strong>Click or Drag & Drop</strong> candidate's PDF</p>
+            <span className="dropzone-hint">Browser computes SHA-256 tamper digest</span>
+          </div>
+
+          {selectedPdf && (
+            <div id="pdfFileSelectedInfo" style={{ marginTop: '1rem', textAlign: 'center' }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                Selected: <strong id="pdfFileName">{selectedPdf.name}</strong>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Option 3: Manual Search */}
+        <div className={`verify-card ${activeOption === 'manual' ? 'active' : ''}`} id="cardManualLookup" onClick={() => setActiveOption('manual')}>
+          <div className="verify-card-header">
+            <span className="card-icon">🔍</span>
+            <div>
+              <h3>Search by ID or Hash</h3>
+              <p>Direct query by Certificate ID or 64-character SHA-256 cryptographic digest</p>
+            </div>
+          </div>
+
+          <form id="manualLookupForm" onSubmit={(e) => {
+            e.preventDefault();
+            if (manualInput.length === 64 && /^[0-9a-fA-F]+$/.test(manualInput)) {
+              verifyByHash(manualInput);
+            } else {
+              verifyById(manualInput);
+            }
+          }}>
+            <div className="form-group">
+              <label htmlFor="manualInput">Certificate ID or SHA-256:</label>
+              <input 
+                type="text" 
+                id="manualInput" 
+                required 
+                placeholder="e.g. CERT-2024-001 or 64-char hash"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn-primary full-width" id="manualLookupBtn" disabled={loading}>
+              <Search size={14} /> Search Blockchain Ledger
+            </button>
+          </form>
+
+          <div className="quick-examples" style={{ marginTop: '1.25rem', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            <span>Try sample: </span>
+            <button 
+              type="button" 
+              className="btn-secondary btn-sm" 
+              style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+              onClick={() => {
+                setManualInput('CERT-2024-001');
+                verifyById('CERT-2024-001');
+              }}
+            >
+              CERT-2024-001
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <div className="loading-card">
-          <div className="loading-spinner"></div>
-          <p>Querying Hyperledger Fabric consensus peers (Org 1, Org 2, Org 3)...</p>
-        </div>
-      )}
-
-      {/* Verification Result Card */}
-      {result && !loading && (
-        <div className="verification-result-wrapper">
-          {/* Status Header */}
-          <div className={`status-header-banner ${isVerified ? 'status-verified' : isRevoked ? 'status-revoked' : 'status-invalid'}`}>
-            <div className="status-icon-box">
-              {isVerified ? <CheckCircle2 size={36} /> : isRevoked ? <AlertTriangle size={36} /> : <XCircle size={36} />}
+      {/* Verification Result Display */}
+      {result && (
+        <section id="verificationResultSection" className="result-section" style={{ display: 'block' }}>
+          <div id="resultBanner" className={`result-banner status-${status === 'VERIFIED' ? 'verified' : status === 'REVOKED' ? 'revoked' : 'invalid'}`}>
+            <div className="banner-icon" id="bannerIcon">
+              {status === 'VERIFIED' ? '✅' : status === 'REVOKED' ? '⚠️' : '❌'}
             </div>
-            <div className="status-text-box">
-              <h3>
-                {isVerified 
-                  ? 'OFFICIAL CREDENTIAL VERIFIED & AUTHENTIC' 
-                  : isRevoked 
-                  ? 'CREDENTIAL REVOKED BY ACADEMIC COMMITTEE' 
-                  : 'CREDENTIAL INVALID OR NOT FOUND ON LEDGER'}
-              </h3>
-              <p>
-                {isVerified
-                  ? result.fileName
-                    ? `PDF document '${result.fileName}' SHA-256 digest matches the immutable blockchain record perfectly.`
-                    : 'This credential was cryptographically confirmed authentic by 3-Organization Hyperledger Fabric consensus.'
-                  : isRevoked
+            <div className="banner-text">
+              <h2 id="bannerTitle">
+                {status === 'VERIFIED' 
+                  ? 'OFFICIAL CREDENTIAL VERIFIED & AUTHENTIC'
+                  : status === 'REVOKED'
+                  ? 'CREDENTIAL REVOKED BY INSTITUTION'
+                  : 'CREDENTIAL INVALID OR NOT FOUND'}
+              </h2>
+              <p id="bannerSubtitle">
+                {status === 'VERIFIED'
+                  ? 'Confirmed authentic by 3-Organization Hyperledger Fabric consensus.'
+                  : status === 'REVOKED'
                   ? 'This certificate was previously issued but has since been revoked on the blockchain.'
                   : result.message || 'No matching record exists on the Hyperledger Fabric ledger.'}
               </p>
             </div>
-            <div className="verified-time-tag">
+            <div className="banner-timestamp" id="bannerTimestamp">
               Verified: {new Date().toLocaleTimeString()}
             </div>
           </div>
 
-          {/* Credential Details Grid */}
-          <div className="credential-details-grid">
-            {/* Student & Degree Information */}
-            <div className="detail-card">
-              <div className="card-top-title">
-                <GraduationCap size={20} color="#38bdf8" />
-                <h4>Candidate Academic Record</h4>
-                <span className="cert-id-tag">{cert.certId || result.queryValue || 'N/A'}</span>
+          <div className="credential-grid">
+            <div className="card credential-card">
+              <div className="card-title">
+                <h3>🎓 Candidate & Academic Information</h3>
+                <span className="step-num" id="certIdTag">{cert.certId || 'N/A'}</span>
               </div>
 
-              <div className="kv-list">
-                <div className="kv-row">
-                  <span className="kv-label">Student Name</span>
-                  <span className="kv-val val-highlight">{cert.studentName || 'Unregistered / Invalid'}</span>
+              <div className="credential-fields">
+                <div className="field-item">
+                  <span className="field-label">Student Name:</span>
+                  <span className="field-value" id="resStudentName">{cert.studentName || cert.studentId || '—'}</span>
                 </div>
-
-                <div className="kv-row">
-                  <span className="kv-label">Registration ID</span>
-                  <span className="kv-val">{cert.studentId || 'N/A'}</span>
+                <div className="field-item">
+                  <span className="field-label">Student Registration ID:</span>
+                  <span className="field-value" id="resStudentId">{cert.studentId || '—'}</span>
                 </div>
-
-                <div className="kv-row">
-                  <span className="kv-label">Conferred Degree</span>
-                  <span className="kv-val val-degree">{cert.certType || 'Degree Certificate'}</span>
+                <div className="field-item">
+                  <span className="field-label">Awarded Degree / Title:</span>
+                  <span className="field-value" id="resCertType">{cert.certType || '—'}</span>
                 </div>
-
-                <div className="kv-row">
-                  <span className="kv-label">Academic Department</span>
-                  <span className="kv-val">{cert.department ? `Department of ${cert.department}` : 'Department of Computer Science & Engineering'}</span>
+                <div className="field-item">
+                  <span className="field-label">Department:</span>
+                  <span className="field-value" id="resDepartment">Department of {cert.department || 'Computer Science & Engineering'}</span>
                 </div>
-
-                <div className="kv-row">
-                  <span className="kv-label">Date of Official Conformance</span>
-                  <span className="kv-val">{cert.issueDate || 'N/A'}</span>
+                <div className="field-item">
+                  <span className="field-label">Date of Issuance:</span>
+                  <span className="field-value" id="resIssueDate">{cert.issueDate || '—'}</span>
                 </div>
-
-                <div className="kv-row">
-                  <span className="kv-label">Ledger State</span>
-                  <span className="kv-val">
-                    <span className={`status-pill ${isVerified ? 'issued' : isRevoked ? 'revoked' : 'invalid'}`}>
-                      {cert.status || result.verificationStatus}
+                <div className="field-item">
+                  <span className="field-label">Ledger Status:</span>
+                  <span className="field-value" id="resStatusBadge">
+                    <span className={`badge-status ${status}`}>
+                      {cert.status || status}
                     </span>
                   </span>
                 </div>
               </div>
 
-              <div className="actions-bar">
+              <div className="certificate-actions" style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                 {cert.certId && (
-                  <a href={`${API_BASE}/certificates/${cert.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+                  <a href={`${API_BASE}/certificates/${cert.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-primary btn-sm" id="viewPdfLink">
                     <FileText size={14} /> View Official PDF
                   </a>
                 )}
                 {cert.ipfsHash && (
-                  <a href={`http://localhost:8080/ipfs/${cert.ipfsHash}`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
-                    <Globe size={14} /> IPFS Gateway
+                  <a href={`http://localhost:8080/ipfs/${cert.ipfsHash}`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm" id="viewIpfsLink">
+                    <Globe size={14} /> View on IPFS Gateway
                   </a>
                 )}
-                <button type="button" className="btn-secondary btn-sm" onClick={() => window.print()}>
-                  <Printer size={14} /> Print HR Report
+                <button type="button" className="btn-secondary btn-sm" id="printReportBtn" onClick={() => window.print()}>
+                  <Printer size={14} /> Print Report
                 </button>
               </div>
             </div>
 
-            {/* Cryptographic & Blockchain Proofs */}
-            <div className="detail-card">
-              <div className="card-top-title">
-                <Lock size={20} color="#a855f7" />
-                <h4>Hyperledger Fabric 2.5 Consensus Proofs</h4>
+            <div className="card proof-card">
+              <div className="card-title">
+                <h3>⛓️ Cryptographic & Consensus Proofs</h3>
+                <span className="step-num">Fabric 2.5</span>
               </div>
 
-              <div className="proofs-container">
-                <div className="proof-block">
-                  <span className="proof-heading">SHA-256 Digest Fingerprint:</span>
-                  <code className="hash-code">{cert.docHash || result.queryValue || '—'}</code>
-                  <span className="proof-sub">Byte-for-byte immutable hash matching the on-chain register</span>
+              <div className="proof-list">
+                <div className="proof-item">
+                  <span className="proof-label">SHA-256 Document Fingerprint:</span>
+                  <code className="proof-hash" id="resDocHash">{cert.docHash || '—'}</code>
                 </div>
 
-                <div className="proof-block">
-                  <span className="proof-heading">Decentralized IPFS CID:</span>
-                  <code className="hash-code">{cert.ipfsHash || '—'}</code>
+                <div className="proof-item">
+                  <span className="proof-label">Decentralized IPFS CID:</span>
+                  <code className="proof-hash" id="resIpfsCid">{cert.ipfsHash || '—'}</code>
                 </div>
 
-                <div className="proof-block">
-                  <span className="proof-heading">3-Organization Approval Endorsement:</span>
-                  <div className="endorsement-flow">
-                    <div className="flow-step">
-                      <span className="flow-check">✓</span>
+                <div className="proof-item">
+                  <span className="proof-label">Issuing Organization MSP:</span>
+                  <span className="proof-val" id="resIssuerMsp">{cert.issuerMSP || 'Org3MSP (Central University Governance)'}</span>
+                </div>
+
+                <div className="proof-item">
+                  <span className="proof-label">Consortium Multi-Party Endorsement Chain:</span>
+                  <div className="approval-chain">
+                    <div className="chain-step">
+                      <span className="chain-dot">✓</span>
                       <div>
                         <strong>Org 1 (CSE Faculty & HOD)</strong>
                         <p>Departmental Curriculum & Credit Clearance</p>
                       </div>
                     </div>
-
-                    <div className="flow-step">
-                      <span className="flow-check">✓</span>
+                    <div className="chain-step">
+                      <span className="chain-dot">✓</span>
                       <div>
                         <strong>Org 2 (Examination Board)</strong>
                         <p>Official Grade & Transcript Lockdown</p>
                       </div>
                     </div>
-
-                    <div className="flow-step">
-                      <span className="flow-check">✓</span>
+                    <div className="chain-step">
+                      <span className="chain-dot">✓</span>
                       <div>
                         <strong>Org 3 (Dean & Administration)</strong>
                         <p>Final Clearance & Blockchain Anchoring</p>
@@ -508,18 +430,21 @@ export default function EmployerPortal({ initialCertId }) {
             </div>
           </div>
 
-          {/* Revocation Banner if revoked */}
-          {isRevoked && (
-            <div className="revocation-banner">
-              <h4>⚠️ Official Revocation Record</h4>
-              <p><strong>Reason:</strong> {cert.revocation?.reason || 'Administrative disciplinary revocation'}</p>
-              <div className="revocation-foot">
-                <span>Revoking Authority: <strong>{cert.revocation?.revokedBy || 'Dean / Registrar'}</strong></span>
-                <span>Revocation Date: <strong>{cert.revocation?.revokedAt ? new Date(cert.revocation.revokedAt).toLocaleString() : 'N/A'}</strong></span>
+          {status === 'REVOKED' && (
+            <div id="revocationBox" className="card revocation-alert" style={{ marginTop: '1.5rem', borderLeft: '3px solid var(--danger)' }}>
+              <h3 style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={18} /> Notice of Administrative Revocation
+              </h3>
+              <p id="revocationReasonText" style={{ margin: '0.5rem 0' }}>
+                {cert.revocation?.reason || 'Revoked by Academic Integrity Committee'}
+              </p>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                <span>Revoked By: <strong id="resRevokedBy">{cert.revocation?.revokedBy || 'Dean / Registrar'}</strong></span> |{' '}
+                <span>Date: <strong id="resRevokedAt">{cert.revocation?.revokedAt ? new Date(cert.revocation.revokedAt).toLocaleString() : 'Recorded on Ledger'}</strong></span>
               </div>
             </div>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

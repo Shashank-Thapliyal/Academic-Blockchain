@@ -1,119 +1,166 @@
-import React, { useState, useEffect } from 'react';
-import { useNetwork } from '../context/NetworkContext';
-import { Award, FileText, Globe, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Award, FileText, Globe, CheckCircle, Copy } from 'lucide-react';
 
-export default function IssuanceModule({ trackedRequest, onCertificateIssued }) {
-  const { API_BASE } = useNetwork();
-  const [certId, setCertId] = useState('CERT-2024-001');
-  const [issuing, setIssuing] = useState(false);
-  const [issueResult, setIssueResult] = useState(null);
-  const [error, setError] = useState(null);
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
-  useEffect(() => {
-    if (trackedRequest?.requestId) {
-      setCertId(`CERT-${trackedRequest.requestId.replace('REQ-', '')}`);
+export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
+  const [certId, setCertId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [issuedData, setIssuedData] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
+
+  React.useEffect(() => {
+    if (currentRequest?.status === 'ADMIN_FINALIZED') {
+      setCertId(`CERT-${currentRequest.requestId.replace('REQ-', '')}`);
     }
-  }, [trackedRequest]);
+  }, [currentRequest]);
 
   const handleIssue = async () => {
     if (!certId) {
-      alert('Please enter a Certificate ID.');
+      alert('Please enter a Certificate ID');
+      return;
+    }
+    if (!currentRequest) {
+      alert('Please track an ADMIN_FINALIZED request first.');
       return;
     }
 
-    if (!trackedRequest || (trackedRequest.status !== 'ADMIN_FINALIZED' && trackedRequest.status !== 'CERTIFICATE_ISSUED')) {
-      alert('Certificate issuance requires an ADMIN_FINALIZED request.');
-      return;
-    }
+    setLoading(true);
+    setIssuedData(null);
 
-    setIssuing(true);
-    setError(null);
     try {
       const res = await fetch(`${API_BASE}/certificates/issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           certId,
-          requestId: trackedRequest.requestId,
-          studentId: trackedRequest.studentId,
-          certType: trackedRequest.certType,
-          studentName: trackedRequest.details?.name || 'Academic Student',
-          department: trackedRequest.details?.department || 'Computer Science & Engineering'
+          requestId: currentRequest.requestId,
+          studentId: currentRequest.studentId,
+          certType: currentRequest.certType
         })
       });
-
       const data = await res.json();
       if (res.ok) {
-        setIssueResult(data);
-        if (onCertificateIssued) onCertificateIssued(data);
+        setIssuedData(data);
+        // Refresh request
+        const reqRes = await fetch(`${API_BASE}/requests/${currentRequest.requestId}`);
+        if (reqRes.ok) {
+          const updated = await reqRes.json();
+          setCurrentRequest(updated);
+        }
       } else {
-        setError(data.error || 'Issuance failed');
+        alert(`Issuance failed: ${data.error}`);
       }
     } catch (err) {
-      setError(err.message);
+      alert(`Issuance error: ${err.message}`);
     } finally {
-      setIssuing(false);
+      setLoading(false);
     }
   };
 
+  const copyToClipboard = (text, field) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   return (
-    <div className="card" style={{ marginTop: '1.5rem' }}>
+    <div className="card issuance-card">
       <div className="card-title">
-        <h3>3. PDF Generation → IPFS Upload → SHA-256 → Fabric Anchoring</h3>
+        <h3>
+          <Award size={18} className="text-primary" />
+          3. PDF Generation → IPFS Upload → SHA-256 → Fabric Anchoring
+        </h3>
         <span className="step-num">Module 3 & 4</span>
       </div>
       <p className="subtitle">
-        Once a request reaches <code>ADMIN_FINALIZED</code>, Org 3 generates the official PDF, pins it to IPFS, computes the SHA-256 hash, and anchors the certificate on the Hyperledger Fabric ledger.
+        Once a request reaches <code>ADMIN_FINALIZED</code>, Org3 generates the official PDF, pins it to decentralized IPFS, computes the SHA-256 digest, and anchors the certificate on the immutable ledger.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '1.5rem' }}>
-        <div>
+      <div className="issuance-grid">
+        <div className="issuance-form">
           <div className="form-group">
-            <label htmlFor="issueCertId">Assign Certificate ID:</label>
+            <label htmlFor="issueCertId">Certificate ID to Issue:</label>
             <input 
               type="text" 
-              id="issueCertId"
+              id="issueCertId" 
+              placeholder="e.g. CERT-2024-001"
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
-              placeholder="e.g. CERT-2024-001"
             />
           </div>
-
           <button 
             type="button" 
-            className="btn-success full-width"
+            className="btn-success full-width" 
+            id="issueCertBtn"
             onClick={handleIssue}
-            disabled={issuing || !trackedRequest || trackedRequest.status !== 'ADMIN_FINALIZED'}
+            disabled={loading}
           >
-            <Award size={18} />
-            {issuing ? 'Generating & Anchoring...' : '🚀 Issue Certificate & Anchor to Blockchain'}
+            {loading ? 'Generating PDF & Pinning to IPFS...' : '🚀 Issue Certificate & Anchor to Blockchain'}
           </button>
         </div>
 
-        <div style={{ background: '#0f172a', borderRadius: '8px', padding: '1.25rem', border: '1px solid var(--border)' }}>
-          {issueResult ? (
-            <div style={{ borderLeft: '3px solid #10b981', paddingLeft: '1rem' }}>
-              <h4 style={{ color: '#10b981', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <CheckCircle2 size={18} />
-                🎉 Certificate Successfully Issued & Anchored!
+        <div className="issuance-output" id="issueResultPanel">
+          {loading ? (
+            <div className="result-placeholder">
+              ⏳ Generating tamper-proof PDF, uploading to IPFS node, and committing transaction to Fabric peers...
+            </div>
+          ) : issuedData ? (
+            <div style={{ width: '100%', borderLeft: '3px solid var(--success)', paddingLeft: '1rem' }}>
+              <h4 style={{ color: 'var(--success)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CheckCircle size={18} />
+                Certificate Successfully Issued & Anchored!
               </h4>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}><strong>Certificate ID:</strong> <code>{issueResult.certId}</code></p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.3rem' }}><strong>IPFS Content CID:</strong> <code>{issueResult.ipfsCid}</code></p>
-              <p style={{ fontSize: '0.85rem', marginBottom: '0.85rem' }}><strong>SHA-256 Digest:</strong> <code style={{ wordBreak: 'break-all' }}>{issueResult.sha256Hash}</code></p>
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <a href={`${API_BASE}/certificates/${issueResult.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+              <p><strong>Certificate ID:</strong> <code>{issuedData.certId}</code></p>
+              
+              <p style={{ marginTop: '0.35rem' }}>
+                <strong>IPFS Content ID:</strong>{' '}
+                <code>{issuedData.ipfsCid}</code>
+                <button 
+                  type="button" 
+                  className="btn-secondary btn-sm"
+                  style={{ marginLeft: '0.5rem', padding: '1px 6px' }}
+                  onClick={() => copyToClipboard(issuedData.ipfsCid, 'cid')}
+                >
+                  <Copy size={12} /> {copiedField === 'cid' ? 'Copied!' : 'Copy'}
+                </button>
+              </p>
+
+              <p style={{ marginTop: '0.35rem' }}>
+                <strong>SHA-256 Digest:</strong>{' '}
+                <code style={{ wordBreak: 'break-all', fontSize: '0.72rem' }}>{issuedData.sha256Hash}</code>
+                <button 
+                  type="button" 
+                  className="btn-secondary btn-sm"
+                  style={{ marginLeft: '0.5rem', padding: '1px 6px' }}
+                  onClick={() => copyToClipboard(issuedData.sha256Hash, 'hash')}
+                >
+                  <Copy size={12} /> {copiedField === 'hash' ? 'Copied!' : 'Copy'}
+                </button>
+              </p>
+
+              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <a 
+                  href={`${API_BASE}/certificates/${issuedData.certId}/pdf`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="btn-primary btn-sm"
+                >
                   <FileText size={14} /> View Generated PDF
                 </a>
-                <a href={`http://localhost:8080/ipfs/${issueResult.ipfsCid}`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm" style={{ textDecoration: 'none' }}>
+                <a 
+                  href={`http://localhost:8080/ipfs/${issuedData.ipfsCid}`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="btn-secondary btn-sm"
+                >
                   <Globe size={14} /> View on IPFS Gateway
                 </a>
               </div>
             </div>
-          ) : error ? (
-            <div style={{ color: '#ef4444', fontSize: '0.9rem' }}>❌ Issuance Error: {error}</div>
           ) : (
-            <div style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>
-              Issued certificate details, IPFS CID, and cryptographic SHA-256 anchor will appear here.
+            <div className="result-placeholder">
+              Issued certificate details, cryptographic proofs, and IPFS links will appear here.
             </div>
           )}
         </div>

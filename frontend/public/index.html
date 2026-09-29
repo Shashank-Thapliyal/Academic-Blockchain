@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,19 +7,28 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Navigation Header -->
   <header class="top-nav">
     <div class="nav-brand">
       <div class="brand-icon">🎓</div>
       <div class="brand-text">
-        <h1>Academic Blockchain PBL</h1>
-        <p>3-Organization Consortium • Hyperledger Fabric 2.5 • IPFS Storage</p>
+        <h1>Academic Blockchain Portal</h1>
+        <p>3-Org Consortium • Hyperledger Fabric 2.5 • IPFS Cryptographic Storage</p>
       </div>
     </div>
     <div class="nav-actions">
-      <a href="/verify" class="btn-primary btn-sm" style="text-decoration: none; font-weight: 600;">🏢 Employer Verification Portal</a>
+      <!-- Dark/Light Theme Toggle -->
+      <button type="button" class="btn-theme" id="themeToggleBtn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+        <span id="themeToggleIcon">🌙</span>
+      </button>
+
+      <a href="/verify" class="btn-primary btn-sm" style="text-decoration: none; font-weight: 600;">
+        🏢 Employer Verification Portal
+      </a>
+
       <div class="network-badge" id="netStatusBadge">
         <span class="status-dot ping"></span>
         <span id="networkStatusText">Checking Network...</span>
@@ -34,7 +43,7 @@
         <span class="org-tag tag-org1">Org 1</span>
         <h3>University / Faculty</h3>
       </div>
-      <p class="org-role">Academic Dept, Faculty, HOD, DAC Approvals</p>
+      <p class="org-role">Academic Dept • Faculty, HOD & DAC Multi-Stage Approvals</p>
       <div class="org-meta">
         <span>MSP: <code>Org1MSP</code></span>
         <span>Peer: <code>peer0.org1:7051</code></span>
@@ -46,7 +55,7 @@
         <span class="org-tag tag-org2">Org 2</span>
         <h3>Examination Board</h3>
       </div>
-      <p class="org-role">Controller of Examinations, Exam Grade Lockdown</p>
+      <p class="org-role">Controller of Examinations • Official Grade & Transcript Lockdown</p>
       <div class="org-meta">
         <span>MSP: <code>Org2MSP</code></span>
         <span>Peer: <code>peer0.org2:8051</code></span>
@@ -58,14 +67,14 @@
         <span class="org-tag tag-org3">Org 3</span>
         <h3>Admin & Governance</h3>
       </div>
-      <p class="org-role">Dean Sanction, Final Clearance, Issuance & Revocation</p>
+      <p class="org-role">Dean Sanction • Final Clearance, Issuance & Revocation</p>
       <div class="org-meta">
         <span>MSP: <code>Org3MSP</code></span>
         <span>Peer: <code>peer0.org3:9051</code></span>
       </div>
     </div>
 
-    <div class="org-card infra-card">
+    <div class="org-card infra-card" id="infraCard">
       <div class="org-header">
         <span class="org-tag tag-infra">Infra</span>
         <h3>Consensus & Storage</h3>
@@ -80,16 +89,16 @@
 
   <main class="main-container">
     <!-- Tabs Navigation -->
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="workflow-tab">📋 Lifecycle & Workflow</button>
-      <button class="tab-btn" data-tab="register-tab">👤 Student Registration</button>
-      <button class="tab-btn" data-tab="verify-tab">🔍 Verification Portal</button>
-      <button class="tab-btn" data-tab="revoke-tab">⚠️ Revocation</button>
-      <button class="tab-btn" data-tab="ledger-tab">📊 Ledger Explorer</button>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="workflow-tab" role="tab" aria-selected="true">📋 Lifecycle & Workflow</button>
+      <button class="tab-btn" data-tab="register-tab" role="tab" aria-selected="false">👤 Student Registration</button>
+      <button class="tab-btn" data-tab="verify-tab" role="tab" aria-selected="false">🔍 Verification Portal</button>
+      <button class="tab-btn" data-tab="revoke-tab" role="tab" aria-selected="false">⚠️ Revocation</button>
+      <button class="tab-btn" data-tab="ledger-tab" role="tab" aria-selected="false">📊 Ledger Explorer</button>
     </nav>
 
     <!-- Tab 1: Workflow & Issuance -->
-    <section id="workflow-tab" class="tab-content active">
+    <section id="workflow-tab" class="tab-content active" role="tabpanel">
       <div class="panel-grid">
         <!-- Request Submission Form -->
         <div class="card">
@@ -131,7 +140,7 @@
           <p class="subtitle">Select or enter Request ID to track state & execute stage approvals across Org1, Org2, Org3.</p>
 
           <div class="lookup-bar">
-            <input type="text" id="activeReqInput" placeholder="Enter Request ID to track">
+            <input type="text" id="activeReqInput" placeholder="Enter Request ID to track (e.g. REQ-2024-001)">
             <button type="button" class="btn-primary" id="trackReqBtn">Track Request</button>
             <button type="button" class="btn-secondary" id="autoAdvanceBtn">⚡ Auto-Advance All Stages</button>
           </div>
@@ -205,7 +214,7 @@
           <h3>3. PDF Generation → IPFS Upload → SHA-256 → Fabric Anchoring</h3>
           <span class="step-num">Module 3 & 4</span>
         </div>
-        <p class="subtitle">Once a request reaches <code>ADMIN_FINALIZED</code>, Org3 generates the official PDF, pins it to IPFS, computes the SHA-256 hash, and anchors the certificate on the ledger.</p>
+        <p class="subtitle">Once a request reaches <code>ADMIN_FINALIZED</code>, Org3 generates the official PDF, pins it to IPFS, computes the SHA-256 hash, and anchors the certificate on the immutable ledger.</p>
 
         <div class="issuance-grid">
           <div class="issuance-form">
@@ -224,7 +233,7 @@
     </section>
 
     <!-- Tab 2: Student Registration -->
-    <section id="register-tab" class="tab-content">
+    <section id="register-tab" class="tab-content" role="tabpanel">
       <div class="panel-grid">
         <div class="card">
           <div class="card-title">
@@ -282,7 +291,7 @@
     </section>
 
     <!-- Tab 3: Verification Portal -->
-    <section id="verify-tab" class="tab-content">
+    <section id="verify-tab" class="tab-content" role="tabpanel">
       <div class="card full-width-card">
         <div class="card-title">
           <h3>Consortium Certificate Verification Portal</h3>
@@ -328,7 +337,7 @@
     </section>
 
     <!-- Tab 4: Revocation -->
-    <section id="revoke-tab" class="tab-content">
+    <section id="revoke-tab" class="tab-content" role="tabpanel">
       <div class="card">
         <div class="card-title">
           <h3>Revoke Academic Certificate</h3>
@@ -354,8 +363,9 @@
       </div>
     </section>
 
-    <!-- Tab 5: Ledger Explorer -->
-    <section id="ledger-tab" class="tab-content">
+    <!-- Tab 5: Ledger Explorer & History & SSE Activity Stream -->
+    <section id="ledger-tab" class="tab-content" role="tabpanel">
+      <!-- Active World State Table -->
       <div class="card full-width-card">
         <div class="card-title">
           <h3>Immutable Ledger Certificates</h3>
@@ -380,11 +390,48 @@
           </table>
         </div>
       </div>
+
+      <!-- Ledger Key History Viewer & Real-Time Event Feed Grid -->
+      <div class="panel-grid" style="margin-top: 1.5rem;">
+        <!-- Ledger State History (GetHistoryForKey) -->
+        <div class="card">
+          <div class="card-title">
+            <h3>📜 State History Inspector</h3>
+            <span class="step-num">GetHistoryForKey</span>
+          </div>
+          <p class="subtitle">Inspect the complete cryptographic provenance and version trail for any key on the ledger.</p>
+          <div class="lookup-bar" style="margin-bottom: 1rem;">
+            <input type="text" id="historyKeyInput" placeholder="Enter key (e.g. CERT-2024-001 or REQ-2024-001)">
+            <button type="button" class="btn-primary" id="queryHistoryBtn">Inspect Trail</button>
+          </div>
+          <div id="historyTimelineDisplay" class="timeline-container">
+            <p class="placeholder-text">Enter a Certificate or Request ID above to query its immutable lifecycle blocks.</p>
+          </div>
+        </div>
+
+        <!-- Real-Time SSE Activity Stream -->
+        <div class="card">
+          <div class="card-title">
+            <h3>⚡ Live Network Activity Feed</h3>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span class="status-dot online" id="sseDot"></span>
+              <span class="step-num" id="sseStatusBadge">SSE Connected</span>
+              <button type="button" class="btn-secondary btn-sm" id="clearEventsBtn">Clear</button>
+            </div>
+          </div>
+          <p class="subtitle">Real-time Server-Sent Events stream (<code>GET /api/events</code>) emitted directly from Fabric chaincode blocks.</p>
+          <div class="event-feed-container" style="max-height: 380px; overflow-y: auto;">
+            <ul id="eventTickerList" class="activity-feed">
+              <li class="empty-hint">Listening for consortium block events...</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
   <footer class="footer">
-    <p>Academic Blockchain PBL — Hyperledger Fabric 3-Org Network Architecture</p>
+    <p>Academic Blockchain PBL — Hyperledger Fabric 3-Org Network Architecture • Decentralized Zero-Trust Verification</p>
   </footer>
 
   <script src="app.js"></script>

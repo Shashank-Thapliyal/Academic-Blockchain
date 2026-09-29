@@ -1,163 +1,160 @@
-import React, { useState, useEffect } from 'react';
-import { useNetwork } from '../context/NetworkContext';
-import { Send, Search, FastForward, CheckCircle2, Clock, ShieldAlert } from 'lucide-react';
+import React, { useState } from 'react';
+import { Send, Zap, Clock, CheckCircle2, ChevronRight } from 'lucide-react';
+
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
 const STAGES = [
-  'SUBMITTED',
-  'FACULTY_APPROVED',
-  'HOD_APPROVED',
-  'DAC_APPROVED',
-  'EXAM_LOCKED',
-  'DEAN_APPROVED',
-  'ADMIN_FINALIZED'
+  { key: 'SUBMITTED', label: 'SUBMITTED', org: 'Student', num: 1 },
+  { key: 'FACULTY_APPROVED', label: 'FACULTY', org: 'Org 1', num: 2 },
+  { key: 'HOD_APPROVED', label: 'HOD', org: 'Org 1', num: 3 },
+  { key: 'DAC_APPROVED', label: 'DAC', org: 'Org 1', num: 4 },
+  { key: 'EXAM_LOCKED', label: 'EXAM LOCK', org: 'Org 2', num: 5 },
+  { key: 'DEAN_APPROVED', label: 'DEAN', org: 'Org 3', num: 6 },
+  { key: 'ADMIN_FINALIZED', label: 'ADMIN', org: 'Org 3', num: 7 }
 ];
 
-export default function WorkflowModule({ onReadyToIssue, activeRequestId, setActiveRequestId }) {
-  const { API_BASE } = useNetwork();
-  const [reqForm, setReqForm] = useState({
-    requestId: 'REQ-2024-001',
-    studentId: 'STU-2024-001',
-    certType: 'Bachelor of Technology in CSE'
-  });
-  const [trackedRequest, setTrackedRequest] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState(null);
+export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
+  const [reqIdInput, setReqIdInput] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [certType, setCertType] = useState('Bachelor of Technology in CSE');
+  const [activeReqInput, setActiveReqInput] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [comments, setComments] = useState('');
 
-  const generateRandomReqId = () => {
+  const generateReqId = () => {
     const rand = Math.floor(1000 + Math.random() * 9000);
-    setReqForm((prev) => ({ ...prev, requestId: `REQ-2024-${rand}` }));
+    setReqIdInput(`REQ-2024-${rand}`);
   };
 
-  const submitRequest = async (e) => {
+  const handleRequestSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setFeedback({ type: 'loading', message: 'Submitting certificate request to ledger...' });
     try {
       const res = await fetch(`${API_BASE}/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reqForm)
+        body: JSON.stringify({ requestId: reqIdInput, studentId, certType })
       });
       const data = await res.json();
       if (res.ok) {
-        setFeedback({ type: 'success', message: `✅ Request ${reqForm.requestId} submitted on ledger!` });
-        setActiveRequestId(reqForm.requestId);
-        trackRequest(reqForm.requestId);
+        alert(`Request ${reqIdInput} submitted! Current Status: SUBMITTED`);
+        setActiveReqInput(reqIdInput);
+        trackRequest(reqIdInput);
       } else {
-        setFeedback({ type: 'error', message: `❌ Submission failed: ${data.error}` });
-      }
-    } catch (err) {
-      setFeedback({ type: 'error', message: `❌ Network error: ${err.message}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const trackRequest = async (idToTrack) => {
-    const reqId = idToTrack || activeRequestId;
-    if (!reqId) return;
-    try {
-      const res = await fetch(`${API_BASE}/requests/${encodeURIComponent(reqId)}`);
-      if (!res.ok) {
-        alert(`Request ${reqId} not found.`);
-        return;
-      }
-      const data = await res.json();
-      setTrackedRequest(data);
-      if (onReadyToIssue && (data.status === 'ADMIN_FINALIZED' || data.status === 'CERTIFICATE_ISSUED')) {
-        onReadyToIssue(data);
-      }
-    } catch (err) {
-      console.error('Error tracking request:', err);
-    }
-  };
-
-  const advanceStage = async (endpoint, comments) => {
-    if (!trackedRequest) return;
-    try {
-      const res = await fetch(`${API_BASE}/workflow/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: trackedRequest.requestId, comments })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        trackRequest(trackedRequest.requestId);
-      } else {
-        alert(`Approval error: ${data.error}`);
+        alert(`Submission failed: ${data.error}`);
       }
     } catch (err) {
       alert(`Network error: ${err.message}`);
     }
   };
 
-  const autoAdvance = async () => {
-    if (!trackedRequest) {
+  const trackRequest = async (idToTrack) => {
+    const id = idToTrack || activeReqInput;
+    if (!id) return;
+    try {
+      const res = await fetch(`${API_BASE}/requests/${encodeURIComponent(id)}`);
+      if (!res.ok) {
+        alert(`Request ${id} not found.`);
+        return;
+      }
+      const data = await res.json();
+      setCurrentRequest(data);
+    } catch (err) {
+      alert(`Error tracking request: ${err.message}`);
+    }
+  };
+
+  const advanceStage = async (endpoint, defaultComments) => {
+    if (!currentRequest) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/workflow/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          requestId: currentRequest.requestId, 
+          comments: comments || defaultComments 
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setComments('');
+        await trackRequest(currentRequest.requestId);
+      } else {
+        alert(`Approval failed: ${data.error}`);
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const autoAdvanceStages = async () => {
+    if (!currentRequest) {
       alert('Please track or submit a request first.');
       return;
     }
-
+    const reqId = currentRequest.requestId;
     const flow = [
-      { endpoint: 'faculty-approve', from: 'SUBMITTED', comments: 'Faculty credit audit complete' },
-      { endpoint: 'hod-approve', from: 'FACULTY_APPROVED', comments: 'HOD departmental clearance' },
-      { endpoint: 'dac-approve', from: 'HOD_APPROVED', comments: 'DAC compliance confirmed' },
-      { endpoint: 'exam-lock', from: 'DAC_APPROVED', comments: 'Exam grades locked' },
-      { endpoint: 'dean-approve', from: 'EXAM_LOCKED', comments: 'Dean academic sanction' },
-      { endpoint: 'admin-finalize', from: 'DEAN_APPROVED', comments: 'Administrative final clearance' }
+      { endpoint: 'faculty-approve', from: 'SUBMITTED', comment: 'Auto-approved by Faculty' },
+      { endpoint: 'hod-approve', from: 'FACULTY_APPROVED', comment: 'Auto-approved by HOD' },
+      { endpoint: 'dac-approve', from: 'HOD_APPROVED', comment: 'Auto-approved by DAC' },
+      { endpoint: 'exam-lock', from: 'DAC_APPROVED', comment: 'Auto-locked by Exam Board' },
+      { endpoint: 'dean-approve', from: 'EXAM_LOCKED', comment: 'Auto-sanctioned by Dean' },
+      { endpoint: 'admin-finalize', from: 'DEAN_APPROVED', comment: 'Auto-finalized by Administration' }
     ];
 
-    for (const step of flow) {
-      const res = await fetch(`${API_BASE}/requests/${trackedRequest.requestId}`);
-      const req = await res.json();
-      if (req.status === step.from) {
-        await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId: trackedRequest.requestId, comments: step.comments })
-        });
+    setActionLoading(true);
+    try {
+      for (const step of flow) {
+        const res = await fetch(`${API_BASE}/requests/${reqId}`);
+        const cur = await res.json();
+        if (cur.status === step.from) {
+          await fetch(`${API_BASE}/workflow/${step.endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: reqId, comments: step.comment })
+          });
+        }
       }
+      await trackRequest(reqId);
+      alert(`🎉 Auto-advanced request ${reqId} to completed workflow state!`);
+    } catch (err) {
+      alert(`Auto-advance error: ${err.message}`);
+    } finally {
+      setActionLoading(false);
     }
-
-    await trackRequest(trackedRequest.requestId);
   };
 
-  const currentIndex = trackedRequest ? STAGES.indexOf(trackedRequest.status) : -1;
+  const currentStatus = currentRequest?.status || '';
+  const currentStageIndex = STAGES.findIndex(s => s.key === currentStatus);
 
   return (
     <div className="panel-grid">
-      {/* 1. Request Submission */}
+      {/* 1. Submission Form */}
       <div className="card">
         <div className="card-title">
-          <h3>1. Submit Certificate Request</h3>
+          <h3>
+            <Send size={18} className="text-primary" />
+            1. Submit Certificate Request
+          </h3>
           <span className="step-num">Module 1</span>
         </div>
+        <p className="subtitle">Initiates the cryptographic endorsement pipeline across Org 1, 2, and 3.</p>
 
-        {feedback && (
-          <div style={{
-            padding: '0.75rem',
-            marginBottom: '1rem',
-            borderRadius: '6px',
-            fontSize: '0.85rem',
-            background: feedback.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-            color: feedback.type === 'success' ? '#34d399' : '#f87171',
-            border: `1px solid ${feedback.type === 'success' ? '#10b981' : '#ef4444'}`
-          }}>
-            {feedback.message}
-          </div>
-        )}
-
-        <form onSubmit={submitRequest}>
+        <form id="reqForm" onSubmit={handleRequestSubmit}>
           <div className="form-group">
             <label htmlFor="reqIdInput">Request ID:</label>
             <div className="input-with-action">
               <input 
                 type="text" 
-                id="reqIdInput"
+                id="reqIdInput" 
                 required 
-                value={reqForm.requestId}
-                onChange={(e) => setReqForm({ ...reqForm, requestId: e.target.value })}
+                placeholder="e.g. REQ-2024-001"
+                value={reqIdInput}
+                onChange={(e) => setReqIdInput(e.target.value)}
               />
-              <button type="button" className="btn-secondary" onClick={generateRandomReqId}>
+              <button type="button" className="btn-secondary" id="genReqIdBtn" onClick={generateReqId}>
                 Auto
               </button>
             </div>
@@ -167,11 +164,11 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
             <label htmlFor="reqStudentId">Registered Student ID:</label>
             <input 
               type="text" 
-              id="reqStudentId"
+              id="reqStudentId" 
               required 
               placeholder="e.g. STU-2024-001"
-              value={reqForm.studentId}
-              onChange={(e) => setReqForm({ ...reqForm, studentId: e.target.value })}
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
             />
           </div>
 
@@ -179,8 +176,8 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
             <label htmlFor="reqCertType">Degree / Certificate Type:</label>
             <select 
               id="reqCertType"
-              value={reqForm.certType}
-              onChange={(e) => setReqForm({ ...reqForm, certType: e.target.value })}
+              value={certType}
+              onChange={(e) => setCertType(e.target.value)}
             >
               <option value="Bachelor of Technology in CSE">Bachelor of Technology in CSE</option>
               <option value="Master of Science in Data Science">Master of Science in Data Science</option>
@@ -189,122 +186,150 @@ export default function WorkflowModule({ onReadyToIssue, activeRequestId, setAct
             </select>
           </div>
 
-          <button type="submit" className="btn-primary full-width" disabled={loading}>
-            <Send size={16} />
+          <button type="submit" className="btn-primary full-width" id="submitReqBtn">
             Submit Certificate Request
           </button>
         </form>
       </div>
 
-      {/* 2. 7-Stage Stepper & Workflow Progression */}
-      <div className="card">
+      {/* 2. 7-Stage State Machine */}
+      <div className="card wide-card">
         <div className="card-title">
-          <h3>2. 7-Stage State Machine Progression</h3>
+          <h3>
+            <Clock size={18} className="text-primary" />
+            2. 7-Stage Approval Workflow State Machine
+          </h3>
           <span className="step-num">Module 2</span>
         </div>
+        <p className="subtitle">Execute endorsements sequentially across University (Org1), Exam Board (Org2), and Dean/Admin (Org3).</p>
 
-        <div className="form-group">
-          <label htmlFor="activeReq">Track Request by ID:</label>
-          <div className="input-with-action">
-            <input 
-              type="text" 
-              id="activeReq"
-              placeholder="Enter REQ-ID..."
-              value={activeRequestId}
-              onChange={(e) => setActiveRequestId(e.target.value)}
-            />
-            <button type="button" className="btn-primary" onClick={() => trackRequest(activeRequestId)}>
-              <Search size={14} /> Track
-            </button>
-            <button type="button" className="btn-secondary" onClick={autoAdvance} title="Fast forward all 7 stages">
-              <FastForward size={14} /> Auto-Advance
-            </button>
-          </div>
+        <div className="lookup-bar">
+          <input 
+            type="text" 
+            id="activeReqInput" 
+            placeholder="Enter Request ID to track (e.g. REQ-2024-001)"
+            value={activeReqInput}
+            onChange={(e) => setActiveReqInput(e.target.value)}
+          />
+          <button type="button" className="btn-primary" id="trackReqBtn" onClick={() => trackRequest(activeReqInput)}>
+            Track Request
+          </button>
+          <button type="button" className="btn-secondary" id="autoAdvanceBtn" onClick={autoAdvanceStages} disabled={actionLoading || !currentRequest}>
+            <Zap size={14} />
+            ⚡ Auto-Advance All Stages
+          </button>
         </div>
 
-        {/* Stepper Display */}
-        <div className="stepper-container">
+        {/* Stepper Pipeline */}
+        <div className="stepper" id="workflowStepper">
           {STAGES.map((stage, idx) => {
-            const isCompleted = currentIndex > idx || trackedRequest?.status === 'CERTIFICATE_ISSUED';
-            const isActive = currentIndex === idx && trackedRequest?.status !== 'CERTIFICATE_ISSUED';
+            const isCompleted = currentStageIndex > idx || currentStatus === 'ADMIN_FINALIZED' || currentStatus === 'CERTIFICATE_ISSUED';
+            const isActive = currentStageIndex === idx && currentStatus !== 'CERTIFICATE_ISSUED';
+
             return (
-              <React.Fragment key={stage}>
-                <div className={`step-node ${isCompleted ? 'completed' : ''} ${isActive ? 'active' : ''}`}>
+              <React.Fragment key={stage.key}>
+                <div 
+                  className={`step-item ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+                  id={`step-${stage.key}`}
+                >
                   <div className="step-circle">
-                    {isCompleted ? '✓' : idx + 1}
+                    {isCompleted ? '✓' : stage.num}
                   </div>
-                  <span className="step-label">{stage.replace('_APPROVED', '').replace('_FINALIZED', '')}</span>
+                  <div className="step-label">{stage.label}</div>
+                  <div className="step-org">{stage.org}</div>
                 </div>
                 {idx < STAGES.length - 1 && (
-                  <div className={`step-line ${isCompleted ? 'completed' : ''}`} />
+                  <div className={`step-line ${isCompleted && currentStageIndex > idx ? 'completed' : ''}`} />
                 )}
               </React.Fragment>
             );
           })}
         </div>
 
-        {/* Action Controls based on current stage */}
-        <div style={{ marginTop: '1.25rem', padding: '1rem', background: '#0f172a', borderRadius: '8px' }}>
-          <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Next Required Action:</h4>
-          {trackedRequest ? (
-            <div>
-              {trackedRequest.status === 'SUBMITTED' && (
-                <button className="btn-primary" onClick={() => advanceStage('faculty-approve', 'Faculty review & credits verified')}>
-                  ✍️ Org 1: Approve as Faculty Advisor
-                </button>
-              )}
-              {trackedRequest.status === 'FACULTY_APPROVED' && (
-                <button className="btn-primary" onClick={() => advanceStage('hod-approve', 'HOD approval confirmed')}>
-                  ✍️ Org 1: Approve as HOD (CSE)
-                </button>
-              )}
-              {trackedRequest.status === 'HOD_APPROVED' && (
-                <button className="btn-primary" onClick={() => advanceStage('dac-approve', 'Department Academic Committee approval granted')}>
-                  ✍️ Org 1: Approve as DAC Committee
-                </button>
-              )}
-              {trackedRequest.status === 'DAC_APPROVED' && (
-                <button className="btn-primary" style={{ background: '#f59e0b' }} onClick={() => advanceStage('exam-lock', 'Grades locked by Exam Controller')}>
-                  🔒 Org 2: Lock Exam Grades & Transcripts
-                </button>
-              )}
-              {trackedRequest.status === 'EXAM_LOCKED' && (
-                <button className="btn-primary" style={{ background: '#10b981' }} onClick={() => advanceStage('dean-approve', 'Dean Academic clearance granted')}>
-                  ✍️ Org 3: Sanction by Dean
-                </button>
-              )}
-              {trackedRequest.status === 'DEAN_APPROVED' && (
-                <button className="btn-primary" style={{ background: '#10b981' }} onClick={() => advanceStage('admin-finalize', 'Final Administrative clearance')}>
-                  🏛️ Org 3: Finalize by Central Administration
-                </button>
-              )}
-              {trackedRequest.status === 'ADMIN_FINALIZED' && (
-                <p style={{ color: '#34d399', fontWeight: 600 }}>
-                  🎉 Request is ADMIN_FINALIZED! Proceed to Module 3 below to issue & anchor on ledger.
-                </p>
-              )}
-              {trackedRequest.status === 'CERTIFICATE_ISSUED' && (
-                <p style={{ color: '#38bdf8', fontWeight: 600 }}>
-                  🎓 Certificate Issued on Ledger! Cert ID: <code>{trackedRequest.certificateId || 'N/A'}</code>
-                </p>
-              )}
-            </div>
-          ) : (
-            <p style={{ color: '#64748b', fontSize: '0.85rem' }}>No active request loaded. Track an existing request or submit a new one.</p>
-          )}
+        {/* Dynamic Approval Actions */}
+        <div className="action-box" id="approvalActions">
+          <h4>Next Pending Action:</h4>
+          <div id="actionControls" className="action-buttons">
+            {!currentRequest ? (
+              <p className="placeholder-text">Submit or track a request above to perform stage approvals.</p>
+            ) : currentStatus === 'SUBMITTED' ? (
+              <button 
+                className="btn-primary" 
+                onClick={() => advanceStage('faculty-approve', 'Faculty endorsement granted')}
+                disabled={actionLoading}
+              >
+                ✍️ Org 1: Approve as Faculty
+              </button>
+            ) : currentStatus === 'FACULTY_APPROVED' ? (
+              <button 
+                className="btn-primary" 
+                onClick={() => advanceStage('hod-approve', 'HOD recommendation verified')}
+                disabled={actionLoading}
+              >
+                ✍️ Org 1: Approve as HOD
+              </button>
+            ) : currentStatus === 'HOD_APPROVED' ? (
+              <button 
+                className="btn-primary" 
+                onClick={() => advanceStage('dac-approve', 'Department Academic Committee approval complete')}
+                disabled={actionLoading}
+              >
+                ✍️ Org 1: Approve as DAC
+              </button>
+            ) : currentStatus === 'DAC_APPROVED' ? (
+              <button 
+                className="btn-primary" 
+                style={{ background: '#f59e0b' }}
+                onClick={() => advanceStage('exam-lock', 'Grades locked by Controller of Examinations')}
+                disabled={actionLoading}
+              >
+                🔒 Org 2: Lock Exam Grades
+              </button>
+            ) : currentStatus === 'EXAM_LOCKED' ? (
+              <button 
+                className="btn-primary" 
+                style={{ background: '#10b981' }}
+                onClick={() => advanceStage('dean-approve', 'Dean Academic clearance granted')}
+                disabled={actionLoading}
+              >
+                ✍️ Org 3: Sanction as Dean
+              </button>
+            ) : currentStatus === 'DEAN_APPROVED' ? (
+              <button 
+                className="btn-primary" 
+                style={{ background: '#6366f1' }}
+                onClick={() => advanceStage('admin-finalize', 'Administrative clearance verified')}
+                disabled={actionLoading}
+              >
+                🏛️ Org 3: Finalize by Administration
+              </button>
+            ) : currentStatus === 'ADMIN_FINALIZED' ? (
+              <div style={{ color: 'var(--success)', fontWeight: 600 }}>
+                🎉 Request is ADMIN_FINALIZED! Proceed to Certificate Issuance below.
+              </div>
+            ) : currentStatus === 'CERTIFICATE_ISSUED' ? (
+              <div style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                🎓 Certificate Issued on Ledger! Cert ID: <code>{currentRequest.certificateId || 'N/A'}</code>
+              </div>
+            ) : (
+              <p className="placeholder-text">Current State: {currentStatus}</p>
+            )}
+          </div>
         </div>
 
-        {/* Transition History */}
+        {/* Transition Audit Log */}
         <div className="history-box">
           <h4>Ledger Transition History:</h4>
-          <ul className="history-list">
-            {!trackedRequest?.history || trackedRequest.history.length === 0 ? (
-              <li className="empty-hint">No transition history</li>
+          <ul id="historyList" className="history-list">
+            {!currentRequest || !currentRequest.history || currentRequest.history.length === 0 ? (
+              <li className="empty-hint">No audit transitions recorded yet</li>
             ) : (
-              trackedRequest.history.map((h, i) => (
+              currentRequest.history.map((h, i) => (
                 <li key={i}>
-                  <span><strong>{h.stage}</strong> by <code>{h.updatedBy || 'Authority'}</code></span>
-                  <span style={{ color: '#94a3b8' }}>{h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : ''} - {h.comments || ''}</span>
+                  <span><strong>{h.stage}</strong> by <code>{h.updatedBy || 'N/A'}</code></span>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {h.timestamp ? new Date(h.timestamp).toLocaleTimeString() : ''} - {h.comments || ''}
+                  </span>
                 </li>
               ))
             )}

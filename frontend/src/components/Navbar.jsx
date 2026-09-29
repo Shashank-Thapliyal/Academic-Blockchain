@@ -1,9 +1,16 @@
 import React from 'react';
 import { useNetwork } from '../context/NetworkContext';
-import { ShieldCheck, GraduationCap, Building2, ExternalLink } from 'lucide-react';
+import { ShieldCheck, GraduationCap, Building2, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ currentView, setCurrentView }) {
+export default function Navbar({ currentView, setCurrentView, theme, setTheme }) {
   const { health } = useNetwork();
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('academic_theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  };
 
   return (
     <header className="top-nav">
@@ -26,6 +33,17 @@ export default function Navbar({ currentView, setCurrentView }) {
       </div>
 
       <div className="nav-actions">
+        <button 
+          type="button" 
+          className="btn-theme" 
+          id="themeToggleBtn"
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          aria-label="Toggle Theme"
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
         {currentView === 'consortium' ? (
           <button 
             type="button" 
@@ -46,7 +64,7 @@ export default function Navbar({ currentView, setCurrentView }) {
           </button>
         )}
 
-        <div className="network-badge">
+        <div className="network-badge" id="netStatusBadge">
           <span 
             className={`status-dot ${
               health.status === 'ONLINE' 
@@ -56,12 +74,12 @@ export default function Navbar({ currentView, setCurrentView }) {
                 : ''
             }`} 
           />
-          <span>
+          <span id="networkStatusText">
             {health.status === 'ONLINE'
-              ? 'Consortium Online (Org1, Org2, Org3)'
-              : health.status === 'PARTIAL'
-              ? 'Consortium Partial'
-              : 'Ledger Disconnected'}
+              ? '3-Org Network Online (Fabric 2.5 + IPFS)'
+              : health.status === 'OFFLINE'
+              ? 'Network Disconnected'
+              : 'Connecting to Ledger...'}
           </span>
         </div>
       </div>

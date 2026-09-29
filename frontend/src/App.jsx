@@ -7,111 +7,125 @@ import IssuanceModule from './components/IssuanceModule';
 import EmployerPortal from './components/EmployerPortal';
 import RevocationModule from './components/RevocationModule';
 import LedgerExplorer from './components/LedgerExplorer';
-import { 
-  ClipboardList, 
-  UserCheck, 
-  Search, 
-  ShieldAlert, 
-  Database,
-  Building2
-} from 'lucide-react';
+import { NetworkProvider } from './context/NetworkContext';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('consortium'); // 'consortium' | 'employer'
-  const [activeTab, setActiveTab] = useState('workflow'); // 'workflow', 'students', 'verify', 'revoke', 'ledger'
-  const [activeRequestId, setActiveRequestId] = useState('REQ-2024-001');
-  const [readyRequest, setReadyRequest] = useState(null);
+  const [currentView, setCurrentView] = useState('consortium');
+  const [activeTab, setActiveTab] = useState('workflow');
+  const [currentRequest, setCurrentRequest] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('academic_theme') ||
+      (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  });
 
   useEffect(() => {
-    // Check if user landed on /verify or has verify query params
-    if (window.location.pathname.includes('verify') || window.location.search.includes('certId')) {
-      setCurrentView('employer');
-    }
-  }, []);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   return (
-    <div className="app-container">
-      <Navbar currentView={currentView} setCurrentView={setCurrentView} />
-
-      <main className="main-content">
-        {currentView === 'employer' ? (
-          <EmployerPortal />
-        ) : (
+    <NetworkProvider>
+      <div className="app-layout">
+        <Navbar 
+          currentView={currentView} 
+          setCurrentView={setCurrentView} 
+          theme={theme}
+          setTheme={setTheme}
+        />
+        
+        {currentView === 'consortium' ? (
           <>
             <ConsortiumBar />
+            
+            <main className="main-container">
+              <nav className="tabs" role="tablist">
+                <button 
+                  className={`tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('workflow')}
+                  role="tab"
+                  aria-selected={activeTab === 'workflow'}
+                >
+                  📋 Lifecycle & Workflow
+                </button>
+                <button 
+                  className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('students')}
+                  role="tab"
+                  aria-selected={activeTab === 'students'}
+                >
+                  👤 Student Registration
+                </button>
+                <button 
+                  className={`tab-btn ${activeTab === 'verify' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('verify')}
+                  role="tab"
+                  aria-selected={activeTab === 'verify'}
+                >
+                  🔍 Verification Portal
+                </button>
+                <button 
+                  className={`tab-btn ${activeTab === 'revoke' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('revoke')}
+                  role="tab"
+                  aria-selected={activeTab === 'revoke'}
+                >
+                  ⚠️ Revocation
+                </button>
+                <button 
+                  className={`tab-btn ${activeTab === 'ledger' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('ledger')}
+                  role="tab"
+                  aria-selected={activeTab === 'ledger'}
+                >
+                  📊 Ledger Explorer
+                </button>
+              </nav>
 
-            {/* Consortium Navigation Tabs */}
-            <nav className="tabs-nav">
-              <button 
-                className={`tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
-                onClick={() => setActiveTab('workflow')}
-              >
-                <ClipboardList size={16} />
-                Lifecycle & Workflow
-              </button>
+              {activeTab === 'workflow' && (
+                <div className="tab-pane">
+                  <WorkflowModule 
+                    currentRequest={currentRequest} 
+                    setCurrentRequest={setCurrentRequest} 
+                  />
+                  <IssuanceModule 
+                    currentRequest={currentRequest}
+                    setCurrentRequest={setCurrentRequest}
+                  />
+                </div>
+              )}
 
-              <button 
-                className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`}
-                onClick={() => setActiveTab('students')}
-              >
-                <UserCheck size={16} />
-                Student Registration
-              </button>
+              {activeTab === 'students' && (
+                <div className="tab-pane">
+                  <StudentModule />
+                </div>
+              )}
 
-              <button 
-                className={`tab-btn ${activeTab === 'verify' ? 'active' : ''}`}
-                onClick={() => setCurrentView('employer')}
-              >
-                <Search size={16} />
-                Verification Portal
-              </button>
+              {activeTab === 'verify' && (
+                <div className="tab-pane">
+                  <EmployerPortal />
+                </div>
+              )}
 
-              <button 
-                className={`tab-btn ${activeTab === 'revoke' ? 'active' : ''}`}
-                onClick={() => setActiveTab('revoke')}
-              >
-                <ShieldAlert size={16} />
-                Revocation
-              </button>
+              {activeTab === 'revoke' && (
+                <div className="tab-pane">
+                  <RevocationModule />
+                </div>
+              )}
 
-              <button 
-                className={`tab-btn ${activeTab === 'ledger' ? 'active' : ''}`}
-                onClick={() => setActiveTab('ledger')}
-              >
-                <Database size={16} />
-                Ledger Explorer
-              </button>
-            </nav>
-
-            {/* Tab Contents */}
-            {activeTab === 'workflow' && (
-              <>
-                <WorkflowModule 
-                  activeRequestId={activeRequestId}
-                  setActiveRequestId={setActiveRequestId}
-                  onReadyToIssue={(req) => setReadyRequest(req)}
-                />
-                <IssuanceModule 
-                  trackedRequest={readyRequest}
-                  onCertificateIssued={() => setActiveTab('ledger')}
-                />
-              </>
-            )}
-
-            {activeTab === 'students' && <StudentModule />}
-
-            {activeTab === 'revoke' && (
-              <RevocationModule onRevoked={() => setActiveTab('ledger')} />
-            )}
-
-            {activeTab === 'ledger' && <LedgerExplorer />}
+              {activeTab === 'ledger' && (
+                <div className="tab-pane">
+                  <LedgerExplorer />
+                </div>
+              )}
+            </main>
           </>
+        ) : (
+          <EmployerPortal isStandalone={true} />
         )}
-      </main>
 
-      <footer className="footer">
-        <p>Academic Blockchain Consortium • Hyperledger Fabric 2.5 Multi-Org Network (Org1, Org2, Org3) • React 18 UI</p>
-      </footer>
-    </div>
+        <footer className="footer">
+          <p>Academic Blockchain PBL — Hyperledger Fabric 3-Org Network Architecture • Decentralized Zero-Trust Verification</p>
+        </footer>
+      </div>
+    </NetworkProvider>
   );
 }

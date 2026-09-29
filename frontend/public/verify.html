@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,7 +22,13 @@
       </div>
     </div>
     <div class="nav-actions">
-      <a href="/" class="btn-secondary btn-sm">⚙️ Consortium Management</a>
+      <!-- Dark/Light Theme Toggle -->
+      <button type="button" class="btn-theme" id="themeToggleBtn" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+        <span id="themeToggleIcon">🌙</span>
+      </button>
+
+      <a href="/" class="btn-secondary btn-sm" style="text-decoration: none; font-weight: 600;">⚙️ Consortium Management</a>
+
       <div class="network-badge" id="netStatusBadge">
         <span class="status-dot ping"></span>
         <span id="networkStatusText">Connecting to Ledger...</span>
