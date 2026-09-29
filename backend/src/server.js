@@ -417,6 +417,19 @@ app.get('/api/certificates/:id/pdf', async (req, res) => {
   }
 });
 
+// Direct IPFS Gateway Proxy (serves pinned IPFS files directly via REST API)
+app.get('/api/ipfs/:cid', async (req, res) => {
+  try {
+    const { cid } = req.params;
+    const fileBuffer = await fetchFromIPFS(cid);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cid}.pdf"`);
+    res.send(fileBuffer);
+  } catch (err) {
+    res.status(502).json({ error: `Failed to retrieve CID ${req.params.cid} from IPFS: ${err.message}` });
+  }
+});
+
 // ==========================================
 // 5. Verification Portal (By ID, By Hash, By File)
 // ==========================================

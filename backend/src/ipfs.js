@@ -10,6 +10,8 @@ const IPFS_GATEWAY_PORT = process.env.IPFS_GATEWAY_PORT || '8080';
 
 const IPFS_API_URL = `http://${IPFS_HOST}:${IPFS_API_PORT}/api/v0`;
 const IPFS_GATEWAY_URL = `http://${IPFS_HOST}:${IPFS_GATEWAY_PORT}/ipfs`;
+// Client-facing gateway URL for browser access from outside the Docker network
+const IPFS_CLIENT_GATEWAY_URL = process.env.IPFS_CLIENT_GATEWAY_URL || 'http://localhost:8080/ipfs';
 
 /**
  * Compute SHA-256 checksum of a buffer.
@@ -49,7 +51,7 @@ async function uploadToIPFS(buffer, filename = 'certificate.pdf') {
       cid,
       size,
       sha256,
-      gatewayUrl: `${IPFS_GATEWAY_URL}/${cid}`
+      gatewayUrl: `${IPFS_CLIENT_GATEWAY_URL}/${cid}`
     };
   } catch (error) {
     console.warn(`[IPFS] Failed to upload to IPFS daemon (${error.message}). Using simulated local CID fallback.`);

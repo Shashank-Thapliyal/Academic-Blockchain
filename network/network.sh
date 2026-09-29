@@ -36,6 +36,9 @@ function networkUp() {
   echo "--> Starting Docker containers for Orderer, 3 Orgs, CouchDBs, and IPFS..."
   docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
+  # Configure IPFS Kubo Gateway for direct path-based browser access (prevents *.ipfs.localhost DNS failure)
+  docker exec ipfs-node ipfs config --json Gateway.PublicGateways '{"localhost": {"UseSubdomains": false, "Paths": ["/ipfs", "/ipns"]}}' >/dev/null 2>&1 || true
+
   echo "--> Waiting for peers and orderer to initialize (8s)..."
   sleep 8
 
