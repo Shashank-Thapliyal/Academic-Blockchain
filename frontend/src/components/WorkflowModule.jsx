@@ -174,6 +174,45 @@ export default function WorkflowModule({ currentRequest, setCurrentRequest }) {
     }
   };
 
+  const handleLockGrades = async () => {
+    if (!currentRequest) {
+      showWarning('Please track a request first.', 'No Active Request');
+      return;
+    }
+    const finalHonors = examClassification === 'CUSTOM'
+      ? (customHonors.trim() || 'WITH FIRST CLASS HONORS')
+      : examClassification;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/workflow/exam-lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: currentRequest.requestId,
+          examOfficerId: 'ExamController-Org2',
+          grade: examGradeLetter || 'A+',
+          cgpa: examCgpa || '9.42',
+          honors: finalHonors,
+          comments: examComments || `Grades locked by Exam Board: ${finalHonors}`
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showSuccess(
+          `🔒 Exam grades sealed on ledger! Honors: ${finalHonors} | CGPA: ${examCgpa} | Grade: ${examGradeLetter}`,
+          'Grades Locked'
+        );
+        await trackRequest(currentRequest.requestId);
+      } else {
+        showError(data.error || 'Exam grade lock rejected by chaincode.', 'Grade Lock Failed');
+      }
+    } catch (err) {
+      showError(err, 'Exam Lock Error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const currentStatus = currentRequest?.status || '';
   const currentStageIndex = STAGES.findIndex(s => s.key === currentStatus);
 
