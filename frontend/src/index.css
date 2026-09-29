@@ -1492,3 +1492,66 @@ tbody tr:hover {
   border-top: 1px solid var(--border);
   background: var(--bg-card-subtle);
 }
+
+
+/* ==========================================================================
+   Full Cryptographic Hash & CID Display Cells
+   ========================================================================== */
+.ledger-hash-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  max-width: 250px;
+  min-width: 190px;
+  transition: border-color 0.15s ease;
+}
+
+.ledger-hash-cell:hover {
+  border-color: var(--border);
+}
+
+.ledger-hash-full {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.28;
+  color: var(--text-secondary);
+  word-break: break-all;
+  user-select: all;
+}
+
+.ledger-cid-link {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.28;
+  color: var(--primary);
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.ledger-cid-link:hover {
+  text-decoration: underline;
+}
+
+.btn-icon-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.btn-icon-copy:hover {
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.08);
+}

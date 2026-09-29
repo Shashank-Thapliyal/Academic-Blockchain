@@ -774,8 +774,22 @@ async function loadCertificates() {
         <td>${c.studentId}</td>
         <td>${c.certType}</td>
         <td><span class="step-tag" style="background:${c.status === 'ISSUED' ? '#065f46' : '#991b1b'}; padding:2px 6px; border-radius:4px;">${c.status}</span></td>
-        <td><a href="http://localhost:8080/ipfs/${c.ipfsHash}" target="_blank" style="color:var(--primary);">${c.ipfsHash ? c.ipfsHash.substring(0, 10) + '...' : 'N/A'}</a></td>
-        <td style="font-family:monospace; font-size:0.75rem;">${c.docHash ? c.docHash.substring(0, 16) + '...' : 'N/A'}</td>
+        <td>
+          ${c.ipfsHash ? `
+            <div class="ledger-hash-cell">
+              <a href="http://localhost:8080/ipfs/${c.ipfsHash}" target="_blank" class="ledger-cid-link" title="${c.ipfsHash}">${c.ipfsHash}</a>
+              <button type="button" class="btn-icon-copy" onclick="navigator.clipboard.writeText('${c.ipfsHash}'); if(typeof showToast==='function') showToast('IPFS CID copied!'); else alert('IPFS CID copied!');" title="Copy IPFS CID">📋</button>
+            </div>
+          ` : '<span class="text-muted">N/A</span>'}
+        </td>
+        <td>
+          ${c.docHash ? `
+            <div class="ledger-hash-cell">
+              <span class="ledger-hash-full" title="${c.docHash}">${c.docHash}</span>
+              <button type="button" class="btn-icon-copy" onclick="navigator.clipboard.writeText('${c.docHash}'); if(typeof showToast==='function') showToast('SHA-256 Hash copied!'); else alert('SHA-256 Hash copied!');" title="Copy SHA-256 Hash">📋</button>
+            </div>
+          ` : '<span class="text-muted">N/A</span>'}
+        </td>
         <td>
           <a href="${API_BASE}/certificates/${c.certId}/pdf" target="_blank" class="btn-secondary btn-sm" style="text-decoration:none;">PDF</a>
         </td>

@@ -330,9 +330,38 @@ app.post('/api/workflow/admin-finalize', async (req, res) => {
 // ==========================================
 app.post('/api/certificates/issue', async (req, res) => {
   try {
-    const { certId, requestId, studentId, certType, studentName, department } = req.body;
+    let { certId, requestId, studentId, certType, studentName, department } = req.body;
     if (!certId || !studentId) {
       return res.status(400).json({ error: 'certId and studentId are required' });
+    }
+
+    // Auto-resolve student profile if missing or default
+    if (!studentName || studentName === 'Academic Student' || !department) {
+      try {
+        const studentRaw = await queryChaincode('GetStudent', [studentId]);
+        if (studentRaw) {
+          const student = typeof studentRaw === 'string' ? JSON.parse(studentRaw) : studentRaw;
+          if (student.name) studentName = student.name;
+          if (student.department) department = student.department;
+        }
+      } catch (err) {
+        console.warn(`Could not resolve student data for ${studentId}:`, err.message);
+      }
+    }
+
+    // Auto-resolve from request object if still needed
+    if (requestId && (!studentName || !department || !certType)) {
+      try {
+        const reqRaw = await queryChaincode('GetCertificateRequest', [requestId]);
+        if (reqRaw) {
+          const reqObj = typeof reqRaw === 'string' ? JSON.parse(reqRaw) : reqRaw;
+          if (!studentName && reqObj.details?.studentName) studentName = reqObj.details.studentName;
+          if (!department && reqObj.details?.department) department = reqObj.details.department;
+          if (!certType && reqObj.certType) certType = reqObj.certType;
+        }
+      } catch (err) {
+        console.warn(`Could not resolve request data for ${requestId}:`, err.message);
+      }
     }
 
     const issueDate = new Date().toISOString().substring(0, 10);
@@ -381,34 +410,37 @@ app.post('/api/certificates/issue', async (req, res) => {
   }
 });
 
-// Download Generated PDF (exact original bytes)
+// Download / View Official Certificate PDF
 app.get('/api/certificates/:id/pdf', async (req, res) => {
   try {
-    const localFilePath = path.join(STORAGE_DIR, `${req.params.id}.pdf`);
-    if (fs.existsSync(localFilePath)) {
-      const pdfBuffer = fs.readFileSync(localFilePath);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${req.params.id}.pdf"`);
-      return res.send(pdfBuffer);
-    }
-
     const cert = await queryChaincode('VerifyCertificate', [req.params.id]);
     if (!cert || !cert.certificate) {
+      const localFilePath = path.join(STORAGE_DIR, `${req.params.id}.pdf`);
+      if (fs.existsSync(localFilePath)) {
+        const pdfBuffer = fs.readFileSync(localFilePath);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${req.params.id}.pdf"`);
+        return res.send(pdfBuffer);
+      }
       return res.status(404).send('Certificate not found');
     }
 
-    if (cert.certificate.ipfsHash) {
+    let certObj = { ...cert.certificate };
+    if (!certObj.studentName || certObj.studentName === 'Academic Student' || !certObj.department) {
       try {
-        const ipfsBuffer = await fetchFromIPFS(cert.certificate.ipfsHash);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${req.params.id}.pdf"`);
-        return res.send(ipfsBuffer);
-      } catch (e) {
-        console.warn(`[IPFS] Could not fetch ${cert.certificate.ipfsHash}: ${e.message}`);
-      }
+        const studentRaw = await queryChaincode('GetStudent', [certObj.studentId]);
+        if (studentRaw) {
+          const student = typeof studentRaw === 'string' ? JSON.parse(studentRaw) : studentRaw;
+          if (student.name) certObj.studentName = student.name;
+          if (student.department) certObj.department = student.department;
+        }
+      } catch (e) {}
     }
 
-    const pdfBuffer = await generateCertificatePDF(cert.certificate);
+    certObj.sha256Hash = certObj.docHash || cert.certificate.docHash;
+    certObj.ipfsCid = certObj.ipfsHash || cert.certificate.ipfsHash;
+
+    const pdfBuffer = await generateCertificatePDF(certObj);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${req.params.id}.pdf"`);
     res.send(pdfBuffer);

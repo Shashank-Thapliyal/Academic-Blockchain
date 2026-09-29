@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../context/ToastContext';
-import { Database, RefreshCw, History, Activity, Radio, FileText, CheckCircle2, ChevronRight, Layers } from 'lucide-react';
+import { Database, RefreshCw, History, Activity, Radio, FileText, CheckCircle2, ChevronRight, Layers, Copy, Check } from 'lucide-react';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -9,6 +9,16 @@ export default function LedgerExplorer() {
   const { showSuccess, showError, showWarning, showInfo } = useToast();
   const [loadingCerts, setLoadingCerts] = useState(false);
   
+  const [copiedField, setCopiedField] = useState(null);
+
+  const copyToClipboard = (text, field, label) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    showInfo(`${label} copied to clipboard!`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   // History state
   const [historyKey, setHistoryKey] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -138,8 +148,8 @@ export default function LedgerExplorer() {
                 <th>Student ID</th>
                 <th>Degree Title</th>
                 <th>Status</th>
-                <th>IPFS CID</th>
-                <th>SHA-256 Hash</th>
+                <th style={{ minWidth: "190px" }}>IPFS CID</th>
+                <th style={{ minWidth: "220px" }}>SHA-256 Hash</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -169,13 +179,47 @@ export default function LedgerExplorer() {
                     </td>
                     <td>
                       {c.ipfsHash ? (
-                        <a href={`http://localhost:8080/ipfs/${c.ipfsHash}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>
-                          {c.ipfsHash.substring(0, 10)}...
-                        </a>
-                      ) : 'N/A'}
+                        <div className="ledger-hash-cell">
+                          <a 
+                            href={`http://localhost:8080/ipfs/${c.ipfsHash}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="ledger-cid-link"
+                            title={c.ipfsHash}
+                          >
+                            {c.ipfsHash}
+                          </a>
+                          <button 
+                            type="button" 
+                            className="btn-icon-copy" 
+                            title="Copy IPFS CID"
+                            onClick={() => copyToClipboard(c.ipfsHash, `cid-${c.certId}`, "IPFS CID")}
+                          >
+                            {copiedField === `cid-${c.certId}` ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-muted">N/A</span>
+                      )}
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
-                      {c.docHash ? `${c.docHash.substring(0, 16)}...` : 'N/A'}
+                    <td>
+                      {c.docHash ? (
+                        <div className="ledger-hash-cell">
+                          <span className="ledger-hash-full" title={c.docHash}>
+                            {c.docHash}
+                          </span>
+                          <button 
+                            type="button" 
+                            className="btn-icon-copy" 
+                            title="Copy full SHA-256 Hash"
+                            onClick={() => copyToClipboard(c.docHash, `hash-${c.certId}`, "SHA-256 Hash")}
+                          >
+                            {copiedField === `hash-${c.certId}` ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-muted">N/A</span>
+                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>

@@ -43,7 +43,9 @@ export default function IssuanceModule({ currentRequest, setCurrentRequest }) {
           certId: certId.trim(),
           requestId: currentRequest.requestId,
           studentId: currentRequest.studentId,
-          certType: currentRequest.certType
+          certType: currentRequest.certType,
+          studentName: currentRequest.details?.studentName || currentRequest.studentName || undefined,
+          department: currentRequest.details?.department || currentRequest.department || undefined
         })
       });
       const data = await res.json();
