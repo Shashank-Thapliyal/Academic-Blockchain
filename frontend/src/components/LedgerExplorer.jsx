@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../context/ToastContext';
-import { Database, RefreshCw, History, Activity, Radio, FileText } from 'lucide-react';
+import { Database, RefreshCw, History, Activity, Radio, FileText, CheckCircle2, ChevronRight, Layers } from 'lucide-react';
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000/api' : '/api';
 
@@ -12,7 +12,8 @@ export default function LedgerExplorer() {
   // History state
   const [historyKey, setHistoryKey] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyRecords, setHistoryRecords] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [activeHistoryTab, setActiveHistoryTab] = useState('workflow'); // 'workflow' | 'certificate'
 
   // SSE Events state
   const [events, setEvents] = useState([]);
@@ -36,26 +37,34 @@ export default function LedgerExplorer() {
     }
   };
 
-  const queryHistory = async () => {
-    if (!historyKey.trim()) {
+  const queryHistory = async (explicitKey) => {
+    const raw = explicitKey !== undefined ? explicitKey : historyKey;
+    if (!raw || !raw.trim()) {
       showWarning('Please enter a Certificate ID or Request ID.', 'Missing Identifier');
       return;
     }
+    const cleanKey = raw.trim();
+    setHistoryKey(cleanKey);
     setHistoryLoading(true);
+
     try {
-      const res = await fetch(`${API_BASE}/history/${encodeURIComponent(historyKey.trim())}`);
+      const res = await fetch(`${API_BASE}/history/${encodeURIComponent(cleanKey)}`);
       const data = await res.json();
       if (!res.ok) {
         showError(data.error || 'History query failed', 'Provenance Query Failed');
         return;
       }
-      const historyList = data.history || [];
-      setHistoryRecords(historyList);
-      if (historyList.length > 0) {
-        showInfo(`Loaded ${historyList.length} provenance transactions for key '${historyKey.trim()}'.`, 'History Retrieved');
+      setHistoryData(data);
+
+      // Auto-set the active tab: if requestHistory exists, default to 'workflow' (where all the 8 endorsement transactions are!)
+      if (data.requestHistory && data.requestHistory.length > 0) {
+        setActiveHistoryTab('workflow');
       } else {
-        showWarning(`No transaction history found for key '${historyKey.trim()}'.`, 'Empty History');
+        setActiveHistoryTab('certificate');
       }
+
+      const totalTxs = (data.history?.length || 0) + (data.requestHistory?.length || 0) + (data.certHistory?.length || 0);
+      showInfo(`Loaded ledger provenance for '${data.key || cleanKey}' (${totalTxs} total block transitions found).`, 'Provenance Retrieved');
     } catch (err) {
       showError(err, 'History Query Error');
     } finally {
@@ -80,6 +89,25 @@ export default function LedgerExplorer() {
       console.warn('SSE initiation failed:', err);
     }
   };
+
+  // Determine which transaction records to show based on active tab
+  const getDisplayRecords = () => {
+    if (!historyData) return [];
+    if (activeHistoryTab === 'workflow') {
+      return historyData.requestHistory && historyData.requestHistory.length > 0 
+        ? historyData.requestHistory 
+        : historyData.history || [];
+    }
+    return historyData.certHistory && historyData.certHistory.length > 0 
+      ? historyData.certHistory 
+      : historyData.history || [];
+  };
+
+  const displayRecords = getDisplayRecords();
+  const hasBothHistories = Boolean(
+    (historyData?.requestHistory && historyData?.requestHistory.length > 0) || 
+    (historyData?.certHistory && historyData?.certHistory.length > 0)
+  );
 
   return (
     <div>
@@ -123,7 +151,15 @@ export default function LedgerExplorer() {
               ) : (
                 certs.map((c) => (
                   <tr key={c.certId}>
-                    <td><code>{c.certId}</code></td>
+                    <td>
+                      <code 
+                        style={{ cursor: 'pointer', color: 'var(--primary)', textDecoration: 'underline' }}
+                        title="Click to inspect lifecycle in State History Inspector"
+                        onClick={() => queryHistory(c.certId)}
+                      >
+                        {c.certId}
+                      </code>
+                    </td>
                     <td>{c.studentId}</td>
                     <td><strong>{c.certType}</strong></td>
                     <td>
@@ -142,9 +178,25 @@ export default function LedgerExplorer() {
                       {c.docHash ? `${c.docHash.substring(0, 16)}...` : 'N/A'}
                     </td>
                     <td>
-                      <a href={`${API_BASE}/certificates/${c.certId}/pdf`} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
-                        <FileText size={12} /> PDF
-                      </a>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn-primary btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                          onClick={() => queryHistory(c.certId)}
+                        >
+                          <History size={12} /> Inspect Trail
+                        </button>
+                        <a 
+                          href={`${API_BASE}/certificates/${c.certId}/pdf`} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="btn-secondary btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                        >
+                          <FileText size={12} /> PDF
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -165,18 +217,20 @@ export default function LedgerExplorer() {
             </h3>
             <span className="step-num">GetHistoryForKey</span>
           </div>
-          <p className="subtitle">Inspect cryptographic provenance and block-by-block transitions for any key.</p>
+          <p className="subtitle">
+            Inspect cryptographic block-by-block transitions for any Certificate (<code>CERT-...</code>) or Workflow Request (<code>REQ-...</code>).
+          </p>
 
           <div className="lookup-bar">
             <input 
               type="text" 
               id="historyKeyInput" 
-              placeholder="e.g. CERT-2024-001 or REQ-2024-001"
+              placeholder="e.g. CERT-2024-1872 or REQ-2024-1872 (prefixes auto-resolved)"
               value={historyKey}
               onChange={(e) => setHistoryKey(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') queryHistory(); }}
             />
-            <button type="button" className="btn-primary" id="queryHistoryBtn" onClick={queryHistory} disabled={historyLoading}>
+            <button type="button" className="btn-primary" id="queryHistoryBtn" onClick={() => queryHistory()} disabled={historyLoading}>
               Inspect Trail
             </button>
           </div>
@@ -184,87 +238,133 @@ export default function LedgerExplorer() {
           <div id="historyTimelineDisplay" style={{ minHeight: '120px' }}>
             {historyLoading ? (
               <p className="placeholder-text">⏳ Traversing ledger historical blocks...</p>
-            ) : !historyRecords ? (
+            ) : !historyData ? (
               <p className="placeholder-text">Enter a Certificate or Request ID above to query its immutable lifecycle blocks.</p>
-            ) : historyRecords.length === 0 ? (
-              <p className="placeholder-text">No ledger historical records found for key <code>{historyKey}</code>.</p>
             ) : (
-              <div className="timeline-feed">
-                {historyRecords.map((r, i) => (
-                  <div key={i} style={{ borderLeft: '2px solid var(--primary)', paddingLeft: '1rem', marginBottom: '1.25rem', position: 'relative' }}>
-                    <div style={{ position: 'absolute', left: '-7px', top: '2px', width: '12px', height: '12px', borderRadius: '50%', background: r.isDelete ? 'var(--danger)' : 'var(--primary)' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                        #{i + 1} • Tx: <code style={{ fontSize: '0.72rem' }}>{r.txId ? r.txId.substring(0, 16) + '...' : 'N/A'}</code>
-                      </span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                        {r.timestamp ? new Date(r.timestamp).toLocaleString() : ''}
-                      </span>
-                    </div>
-                    {r.isDelete && (
-                      <span style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px' }}>
-                        DELETED
-                      </span>
-                    )}
-                    <pre style={{ background: 'var(--bg-card-subtle)', padding: '0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', overflowX: 'auto', maxHeight: '120px', marginTop: '0.35rem', color: 'var(--text-secondary)' }}>
-                      {typeof r.value === 'object' ? JSON.stringify(r.value, null, 2) : String(r.value || '')}
-                    </pre>
+              <div>
+                {/* Architectural Explainer Banner */}
+                <div style={{
+                  background: 'var(--bg-card-subtle)',
+                  border: '1px solid var(--border)',
+                  borderLeft: '4px solid var(--primary)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.65rem 0.85rem',
+                  marginBottom: '1rem',
+                  fontSize: 'var(--text-xs)'
+                }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>💡 Dual-Entity Ledger Architecture:</strong>
+                  <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                    The <strong>Workflow Request</strong> records all 7 sequential stage endorsements (Student → Faculty → HOD → DAC → Exam Lock → Dean → Admin). The final <strong>Certificate</strong> is minted as an anchored credential in 1 final transaction once all endorsements are complete.
+                  </p>
+                </div>
+
+                {/* Segmented View Switcher if both histories exist */}
+                {hasBothHistories && (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <button
+                      type="button"
+                      className={`btn-sm ${activeHistoryTab === 'workflow' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => setActiveHistoryTab('workflow')}
+                    >
+                      <Layers size={13} />
+                      Approval Lifecycle ({historyData.requestHistory?.length || historyData.history?.length} Txs)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-sm ${activeHistoryTab === 'certificate' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => setActiveHistoryTab('certificate')}
+                    >
+                      <CheckCircle2 size={13} />
+                      Minted Certificate ({historyData.certHistory?.length || (historyData.requestHistory ? historyData.history?.length : 1)} Tx)
+                    </button>
                   </div>
-                ))}
+                )}
+
+                {displayRecords.length === 0 ? (
+                  <p className="placeholder-text">No ledger historical records found for key <code>{historyData.key || historyKey}</code>.</p>
+                ) : (
+                  <div className="timeline-feed">
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                      Showing {displayRecords.length} block transition(s) for ledger key: <code>{activeHistoryTab === 'workflow' ? (historyData.linkedRequestKey || historyData.key) : (historyData.linkedCertKey || historyData.key)}</code>
+                    </p>
+
+                    {displayRecords.map((r, i) => {
+                      const val = r.value || {};
+                      const stageName = val.status || (activeHistoryTab === 'workflow' ? val.history?.[val.history.length - 1]?.stage : 'ISSUED');
+                      const signer = val.history?.[val.history.length - 1]?.updatedBy || val.issuerMSP || 'Peer Node';
+                      const comments = val.history?.[val.history.length - 1]?.comments || '';
+
+                      return (
+                        <div key={i} style={{ borderLeft: '2px solid var(--primary)', paddingLeft: '1rem', marginBottom: '1.25rem', position: 'relative' }}>
+                          <div style={{ position: 'absolute', left: '-7px', top: '2px', width: '12px', height: '12px', borderRadius: '50%', background: r.isDelete ? 'var(--danger)' : 'var(--primary)' }} />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.25rem' }}>
+                            <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                              #{i + 1} • <span style={{ color: 'var(--primary)' }}>{stageName}</span> • Tx: <code style={{ fontSize: '0.72rem' }}>{r.txId ? r.txId.substring(0, 16) + '...' : 'N/A'}</code>
+                            </span>
+                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                              {r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A'}
+                            </span>
+                          </div>
+                          
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                            Signed by: <code>{signer}</code>
+                            {comments && <span style={{ marginLeft: '0.5rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>— "{comments}"</span>}
+                          </div>
+
+                          <pre style={{
+                            marginTop: '0.35rem',
+                            background: 'var(--bg-input)',
+                            padding: '0.5rem',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: '0.68rem',
+                            color: 'var(--text-secondary)',
+                            maxHeight: '120px',
+                            overflowY: 'auto'
+                          }}>
+                            {typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)}
+                          </pre>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Real-Time SSE Activity Stream */}
+        {/* Live SSE Event Stream */}
         <div className="card">
           <div className="card-title">
             <h3>
               <Activity size={18} className="text-primary" />
               Live Network Activity Feed
             </h3>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <span className={`status-dot ${sseActive ? 'online' : 'offline'}`} />
-              <span className="step-num">{sseActive ? 'SSE Active' : 'Disconnected'}</span>
-              <button 
-                type="button" 
-                className="btn-secondary btn-sm" 
-                id="clearEventsBtn"
-                onClick={() => setEvents([])}
-              >
-                Clear
-              </button>
-            </div>
+            <span className={`step-num ${sseActive ? 'active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Radio size={12} className={sseActive ? 'animate-pulse' : ''} />
+              {sseActive ? 'SSE ACTIVE' : 'CONNECTING...'}
+            </span>
           </div>
           <p className="subtitle">Real-time Server-Sent Events stream (<code>GET /api/events</code>) emitted directly from Fabric chaincode blocks.</p>
 
-          <div className="event-feed-container" style={{ maxHeight: '380px', overflowY: 'auto' }}>
-            <ul id="eventTickerList" className="activity-feed" style={{ listStyle: 'none' }}>
-              {events.length === 0 ? (
-                <li className="empty-hint">Waiting for consortium block events...</li>
-              ) : (
-                events.map((e, idx) => (
-                  <li key={idx} style={{ padding: '0.6rem 0.8rem', marginBottom: '0.5rem', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--primary)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, color: 'var(--primary)', fontSize: 'var(--text-sm)' }}>
-                        ⚡ {e.eventName || e.type || 'LedgerEvent'}
-                      </span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                        {e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      <span>Tx: <code>{e.txId ? e.txId.substring(0, 14) + '...' : 'Consensus'}</code></span>
-                      {e.payload && (
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          {typeof e.payload === 'object' ? JSON.stringify(e.payload) : String(e.payload)}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))
-              )}
-            </ul>
+          <div className="event-stream-container" id="eventsContainer">
+            {events.length === 0 ? (
+              <p className="placeholder-text">Waiting for consortium block events...</p>
+            ) : (
+              events.map((ev, idx) => (
+                <div key={idx} className="event-item" style={{ borderLeft: '3px solid var(--primary)', padding: '0.5rem 0.75rem', marginBottom: '0.5rem', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)' }}>
+                    <strong style={{ color: 'var(--primary)' }}>{ev.eventName || 'Block Event'}</strong>
+                    <span style={{ color: 'var(--text-muted)' }}>Block #{ev.blockNumber || 'N/A'}</span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    TxId: <code>{ev.transactionId ? ev.transactionId.substring(0, 16) + '...' : 'N/A'}</code>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

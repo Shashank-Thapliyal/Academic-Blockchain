@@ -120,12 +120,115 @@ app.get('/api/requests/:id', async (req, res) => {
   }
 });
 
+
+function resolveLedgerKeys(rawKey) {
+  const trimmed = (rawKey || '').trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('CERT_') || trimmed.startsWith('REQ_') || trimmed.startsWith('STUDENT_')) {
+    return [trimmed];
+  }
+  const candidates = [];
+  if (trimmed.toLowerCase().startsWith('cert-')) {
+    candidates.push(`CERT_${trimmed}`);
+    candidates.push(trimmed);
+  } else if (trimmed.toLowerCase().startsWith('req-')) {
+    candidates.push(`REQ_${trimmed}`);
+    candidates.push(trimmed);
+  } else if (trimmed.toLowerCase().startsWith('stu-')) {
+    candidates.push(`STUDENT_${trimmed}`);
+    candidates.push(trimmed);
+  } else {
+    candidates.push(`CERT_CERT-${trimmed}`);
+    candidates.push(`REQ_REQ-${trimmed}`);
+    candidates.push(`STUDENT_${trimmed}`);
+    candidates.push(`CERT_${trimmed}`);
+    candidates.push(`REQ_${trimmed}`);
+    candidates.push(trimmed);
+  }
+  return [...new Set(candidates)];
+}
+
 app.get('/api/history/:key', async (req, res) => {
+  const rawKey = req.params.key;
+  const candidates = resolveLedgerKeys(rawKey);
+
   try {
-    const history = await getCertificateHistory(req.params.key);
-    res.json({ key: req.params.key, history: history || [] });
+    let resolvedKey = rawKey;
+    let history = [];
+
+    // 1. Try candidate keys in order of likelihood
+    for (const keyToTry of candidates) {
+      try {
+        const records = await getCertificateHistory(keyToTry);
+        if (Array.isArray(records) && records.length > 0) {
+          resolvedKey = keyToTry;
+          history = records;
+          break;
+        }
+      } catch (e) {
+        // Continue trying
+      }
+    }
+
+    // 2. If no candidate found records, fall back to first candidate
+    if (history.length === 0 && candidates.length > 0) {
+      resolvedKey = candidates[0];
+      try {
+        const records = await getCertificateHistory(resolvedKey);
+        history = Array.isArray(records) ? records : [];
+      } catch (e) {
+        history = [];
+      }
+    }
+
+    // 3. Dual-Entity Linkage:
+    // If inspecting a Certificate (1 Tx), also fetch the 7-Stage Request history (8 Txs)
+    // If inspecting a Request, also fetch the minted Certificate history
+    let linkedRequestKey = null;
+    let requestHistory = null;
+    let linkedCertKey = null;
+    let certHistory = null;
+
+    if (history.length > 0) {
+      const latestVal = history[history.length - 1]?.value || history[0]?.value;
+      if (latestVal) {
+        // If it is a certificate, look up its originating request
+        if (latestVal.requestId) {
+          const reqId = latestVal.requestId;
+          linkedRequestKey = reqId.startsWith('REQ_') ? reqId : `REQ_${reqId}`;
+          try {
+            const reqHist = await getCertificateHistory(linkedRequestKey);
+            if (Array.isArray(reqHist) && reqHist.length > 0) {
+              requestHistory = reqHist;
+            }
+          } catch (e) {}
+        }
+
+        // If it is a request, look up its resulting certificate
+        if (latestVal.certificateId) {
+          const cId = latestVal.certificateId;
+          linkedCertKey = cId.startsWith('CERT_') ? cId : `CERT_${cId}`;
+          try {
+            const cHist = await getCertificateHistory(linkedCertKey);
+            if (Array.isArray(cHist) && cHist.length > 0) {
+              certHistory = cHist;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    res.json({
+      key: resolvedKey,
+      query: rawKey,
+      history,
+      linkedRequestKey,
+      requestHistory,
+      linkedCertKey,
+      certHistory
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message, key: req.params.key });
+    res.status(500).json({ error: err.message, key: rawKey });
   }
 });
 
@@ -319,7 +422,12 @@ app.get('/api/certificates/:id/pdf', async (req, res) => {
 // ==========================================
 app.get('/api/verify/id/:certId', async (req, res) => {
   try {
-    const result = await queryChaincode('VerifyCertificate', [req.params.certId]);
+    let certId = req.params.certId.trim();
+    // Strip redundant leading CERT_ if user passed full storage key
+    if (certId.startsWith('CERT_')) {
+      certId = certId.substring(5);
+    }
+    const result = await queryChaincode('VerifyCertificate', [certId]);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

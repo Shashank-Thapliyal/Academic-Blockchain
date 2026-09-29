@@ -816,26 +816,36 @@ async function queryKeyHistory(key) {
   const container = document.getElementById('historyTimelineDisplay');
   if (!container) return;
 
-  container.innerHTML = '<p class="placeholder-text">⏳ Traversing ledger historical blocks for key: <code>' + key + '</code>...</p>';
+  container.innerHTML = '<p class="placeholder-text">⏳ Traversing ledger historical blocks for: <code>' + key + '</code>...</p>';
 
   try {
-    const res = await fetch(`${API_BASE}/history/${encodeURIComponent(key)}`);
+    const res = await fetch(`${API_BASE}/history/${encodeURIComponent(key.trim())}`);
     const data = await res.json();
 
-    if (!res.ok || !data.history || data.history.length === 0) {
-      container.innerHTML = `<p class="placeholder-text">No ledger historical records found for key <code>${key}</code>.</p>`;
+    const activeList = (data.requestHistory && data.requestHistory.length > 0) ? data.requestHistory : (data.history || []);
+
+    if (!res.ok || activeList.length === 0) {
+      container.innerHTML = `<p class="placeholder-text">No ledger historical records found for: <code>${key}</code>.</p>`;
       return;
     }
 
-    const itemsHtml = data.history.map((record, index) => {
+    const explainerHtml = `
+      <div style="background: var(--bg-card-subtle); border-left: 3px solid var(--primary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); margin-bottom: 0.75rem; font-size: var(--text-xs);">
+        <strong>💡 Dual-Entity Architecture:</strong> Workflow Request records the 7 sequential stage endorsements. The final Certificate is anchored in 1 final transaction once approved.
+      </div>
+    `;
+
+    const itemsHtml = activeList.map((record, index) => {
       const isDelete = record.isDelete;
       const txId = record.txId || 'N/A';
       const timestamp = record.timestamp ? new Date(record.timestamp).toLocaleString() : 'N/A';
+      const val = record.value || {};
+      const stage = val.status || val.history?.[val.history.length - 1]?.stage || 'RECORD';
       let valueStr = '';
       try {
-        valueStr = typeof record.value === 'object' ? JSON.stringify(record.value, null, 2) : String(record.value || '');
+        valueStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val || '');
       } catch (e) {
-        valueStr = String(record.value || '');
+        valueStr = String(val || '');
       }
 
       return `
@@ -844,7 +854,7 @@ async function queryKeyHistory(key) {
           <div style="flex: 1;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
               <span style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">
-                #${index + 1} • Tx: <code style="font-size: 0.75rem;">${txId.substring(0, 16)}...</code>
+                #${index + 1} • <span style="color:var(--primary);">${stage}</span> • Tx: <code style="font-size: 0.75rem;">${txId.substring(0, 16)}...</code>
               </span>
               <span style="font-size: var(--text-xs); color: var(--text-muted);">${timestamp}</span>
             </div>
@@ -855,7 +865,7 @@ async function queryKeyHistory(key) {
       `;
     }).join('');
 
-    container.innerHTML = `<div class="timeline-feed">${itemsHtml}</div>`;
+    container.innerHTML = explainerHtml + `<div class="timeline-feed">${itemsHtml}</div>`;
   } catch (err) {
     container.innerHTML = `<p class="placeholder-text" style="color: var(--danger);">Error querying history: ${err.message}</p>`;
   }
