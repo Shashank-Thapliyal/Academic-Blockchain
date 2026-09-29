@@ -43,3 +43,4 @@ Thumbs.db
 # Temporary Certificate Storage (Preserve directory structure)
 backend/storage/certificates/*.pdf
 !backend/storage/certificates/.gitkeep
+Academic_Blockchain_Comprehensive_Project_Report_and_Viva_Guide
